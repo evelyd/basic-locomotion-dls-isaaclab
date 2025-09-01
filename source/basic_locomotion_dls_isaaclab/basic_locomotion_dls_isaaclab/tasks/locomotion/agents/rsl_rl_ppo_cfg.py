@@ -50,10 +50,13 @@ class MorphologycalSymmetriesCfg:
 @configclass
 class FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 500
+    max_iterations = 8000
     save_interval = 50
     experiment_name = "flat_direct"
     empirical_normalization = False
+
+    wandb_project = "aliengo-rl"
+
     policy = RslRlPpoActorCriticCfg(
         class_name="ActorCritic", #ActorCritic, ActorCriticRecurrent, ActorCriticSymm, ActorCriticMoE
         init_noise_std=1.0,
@@ -100,7 +103,7 @@ class FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
             "clock_data",
         ]*int(history_length)
     obs_space_names_critic = obs_space_names_actor
-    """obs_space_names_critic += ["position_gains", 
+    """obs_space_names_critic += ["position_gains",
             "velocity_gains",
             "friction_static",
             "friction_dynamic",
@@ -112,7 +115,7 @@ class FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         obs_space_names_critic = obs_space_names_critic,
         action_space_names = ["actions"],
         joints_order = [
-            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", 
+            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint",
             "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint",
             "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
         ],
@@ -175,7 +178,7 @@ class RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
             "clock_data",
         ]*int(history_length)
     obs_space_names_critic = obs_space_names_actor
-    """obs_space_names_critic += ["position_gains", 
+    """obs_space_names_critic += ["position_gains",
             "velocity_gains",
             "friction_static",
             "friction_dynamic",
@@ -188,9 +191,73 @@ class RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         obs_space_names_critic = obs_space_names_critic,
         action_space_names = ["actions"],
         joints_order = [
-            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", 
+            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint",
             "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint",
             "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
         ],
         robot_name = "a1",
     )
+
+@configclass
+class LeggedRobotCfgPPO(RslRlOnPolicyRunnerCfg):
+    num_steps_per_env = 24
+    max_iterations = 1500
+
+    save_interval = 50 # check for potential saves every this many iterations
+    experiment_name = 'test'
+    run_name = ''
+    # load and resume TODO not sure about the below
+    resume = False
+    load_optimizer = True
+    load_run = -1 # -1 = last run
+    checkpoint = -1 # -1 = last saved model
+    resume_path = None # updated from load_run and chkpt
+
+    policy = RslRlPpoActorCriticCfg(
+        class_name="ActorCritic", #ActorCritic, ActorCriticRecurrent, ActorCriticSymm, ActorCriticMoE
+        init_noise_std=1.0,
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
+        activation="elu",
+    )
+    algorithm = RslRlPpoAlgorithmCfg(
+        class_name="PPO", #PPO, PPOSymmDataAugmented #AMP_PPO
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.005,
+        max_grad_norm=1.0,
+    )
+
+class CommonCfgPPO(LeggedRobotCfgPPO):
+    """Common configuration for the legged robot tasks."""
+    use_wandb = True
+
+    algorithm = RslRlPpoAlgorithmCfg(
+        class_name="PPO", #PPO, PPOSymmDataAugmented #AMP_PPO
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-4,
+        schedule="fixed",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.005,
+        max_grad_norm=1.0,
+    )
+
+class StandDanceCfgPPO(CommonCfgPPO):
+    """Configuration for the stand dance task using PPO."""
+    experiment_name = "stand_dance_cyber_aliengo"
+    max_iterations = 30000
+    save_interval = 300

@@ -15,10 +15,34 @@ from . import agents
 # Register Gym environments.
 ##
 from .locomotion_env import LocomotionEnv
-
+# from .stand_dance_direct_env import CyberStandDanceEnv
 
 # Aliengo environments
 from .locomotion_env import AliengoFlatEnvCfg, AliengoRoughVisionEnvCfg, AliengoRoughBlindEnvCfg
+from .stand_dance_env import StandDanceEnv
+from .stand_dance_direct_env import AliengoStandDanceEnv
+from .aliengo_symmloco_env_cfg import AliengoStandDanceEnvCfg, AliengoStandDanceDirectEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
+
+gym.register(
+    id="Stand-Dance-Aliengo-Flat",
+    entry_point=StandDanceEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": AliengoStandDanceEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:StandDanceCfgPPO",
+    },
+)
+
+gym.register(
+    id="Stand-Dance-Aliengo-Flat-Direct",
+    entry_point=AliengoStandDanceEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": AliengoStandDanceDirectEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:StandDanceCfgPPO",
+    },
+)
 
 gym.register(
     id="Locomotion-Aliengo-Flat",

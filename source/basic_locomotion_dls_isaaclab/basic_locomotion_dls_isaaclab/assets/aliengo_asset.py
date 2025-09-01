@@ -77,12 +77,12 @@ ALIENGO_CFG = ArticulationCfg(
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.4),
+        pos=(0.0, 0.0, 0.34),
         joint_pos={
-            ".*L_hip_joint": 0.0,
+            ".*L_hip_joint": 0.0, # lim +/- 1.2217
             ".*R_hip_joint": 0.0,
-            ".*_thigh_joint": 0.9,
-            ".*_calf_joint": -1.8,
+            ".*_thigh_joint": 0.9, # lim +/- 3.4028 e 38 (infinite)
+            ".*_calf_joint": -1.8, # lim -2.7751, -0.64577
         },
         joint_vel={".*": 0.0},
     ),
