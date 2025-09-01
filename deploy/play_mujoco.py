@@ -91,13 +91,20 @@ if __name__ == '__main__':
     
         # RL controller --------------------------------------------------------------
         if env.step_num % round(1 / (locomotion_policy.RL_FREQ * simulation_dt)) == 0:            
-            desired_joint_pos = locomotion_policy.compute_control(base_pos=base_pos, 
-                                                                    base_ori_euler_xyz=base_ori_euler_xyz, base_quat_wxyz=base_quat_wxyz,
-                                                                    base_lin_vel=base_lin_vel, base_ang_vel=base_ang_vel,
-                                                                    heading_orientation_SO3=heading_orientation_SO3,
-                                                                    joints_pos=joints_pos, joints_vel=joints_vel,
-                                                                    ref_base_lin_vel=ref_base_lin_vel, ref_base_ang_vel=ref_base_ang_vel,
-                                                                    heightmap_data=heightmap.data if locomotion_policy.use_vision else None)
+            
+            desired_joint_pos = locomotion_policy.compute_control(
+                        base_pos=base_pos, 
+                        base_ori_euler_xyz=base_ori_euler_xyz, 
+                        base_quat_wxyz=base_quat_wxyz,
+                        base_lin_vel=base_lin_vel, 
+                        base_ang_vel=base_ang_vel,
+                        heading_orientation_SO3=heading_orientation_SO3,
+                        joints_pos=joints_pos, 
+                        joints_vel=joints_vel,
+                        ref_base_lin_vel=ref_base_lin_vel, 
+                        ref_base_ang_vel=ref_base_ang_vel,
+                        heightmap_data=heightmap.data if locomotion_policy.use_vision else None)
+            
         # PD controller --------------------------------------------------------------
         else:
             desired_joint_pos = locomotion_policy.desired_joint_pos

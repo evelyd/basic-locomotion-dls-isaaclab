@@ -64,6 +64,7 @@ class Console():
                     reference_joint_positions.FR = standUp_qpos[10:13]
                     reference_joint_positions.RL = standUp_qpos[13:16]
                     reference_joint_positions.RR = standUp_qpos[16:19]
+
                     while(time.time() - start_time < time_motion):
                         time_diff = time.time() - start_time
                         alpha = time_diff / time_motion
@@ -99,9 +100,10 @@ class Console():
                     initial_joint_positions.FR = temp[3:6]
                     initial_joint_positions.RL = temp[6:9]
                     initial_joint_positions.RR = temp[9:12]
-
+                    
                     keyframe_id = mujoco.mj_name2id(self.controller_node.env.mjModel, mujoco.mjtObj.mjOBJ_KEY, "down")
                     goDown_qpos = self.controller_node.env.mjModel.key_qpos[keyframe_id]
+                    reference_joint_positions = LegsAttr(*[np.zeros((1, int(self.controller_node.env.mjModel.nu/4))) for _ in range(4)])
                     reference_joint_positions.FL = goDown_qpos[7:10]
                     reference_joint_positions.FR = goDown_qpos[10:13]
                     reference_joint_positions.RL = goDown_qpos[13:16]

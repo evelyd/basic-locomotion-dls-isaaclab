@@ -8,7 +8,7 @@ robot = 'aliengo'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'min
 scene = 'flat'  # flat, random_boxes, random_pyramids, perlin
 
 #policy_path = "/home/iit.local/gturrisi/isaaclab_ws_home/basic-locomotion-dls-isaaclab/tested_policies/hyqreal/2025-07-23_09-19-46_8k_128_128_128_hyq/exported/policy.onnx"
-policy_path = dir_path + "/../tested_policies/" + robot + "/8k_128_128_128_stop" + "/exported/policy.onnx"
+policy_path = dir_path + "/../tested_policies/" + robot + "/8k_128_128_128_aliengo_stop_and_go_correct_offset" + "/exported/policy.onnx"
 
 # ----------------------------------------------------------------------------------------------------------------
 if(robot == "aliengo"):
@@ -59,3 +59,7 @@ if(use_vision):
     size_y_heightmap = 0.6  # Size of the heightmap in meters
 
 observation_space = 48  # Number of observations in the RL policy
+
+use_imu = False
+use_rma = False
+use_cuncurrent_state_est = False

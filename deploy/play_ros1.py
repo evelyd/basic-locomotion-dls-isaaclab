@@ -84,7 +84,7 @@ class Basic_Locomotion_DLS_Isaaclab_Node():
         self.angular_velocity = np.zeros(3)
 
         # Blind State
-        self.joint_positions = np.array([0.0, 1.21, -2.794, 0.0, 1.21, -2.794, 0.0, 1.21, -2.794, 0.0, 1.21, -2.794])
+        self.joint_positions = np.zeros(12)
         self.joint_velocities = np.zeros(12)
 
         
@@ -93,12 +93,13 @@ class Basic_Locomotion_DLS_Isaaclab_Node():
 
 
         self.stand_up_and_down_actions = LegsAttr(*[np.zeros((1, int(self.env.mjModel.nu/4))) for _ in range(4)])
-        #keyframe_id = mujoco.mj_name2id(self.env.mjModel, mujoco.mjtObj.mjOBJ_KEY, "down")
-        #goDown_qpos = self.env.mjModel.key_qpos[keyframe_id]
-        self.stand_up_and_down_actions.FL = self.joint_positions[0:3] #goDown_qpos[7:10]
-        self.stand_up_and_down_actions.FR = self.joint_positions[3:6] #goDown_qpos[10:13]
-        self.stand_up_and_down_actions.RL = self.joint_positions[6:9] #goDown_qpos[13:16]
-        self.stand_up_and_down_actions.RR = self.joint_positions[9:12] #goDown_qpos[16:29]
+        keyframe_id = mujoco.mj_name2id(self.env.mjModel, mujoco.mjtObj.mjOBJ_KEY, "down")
+        goDown_qpos = self.env.mjModel.key_qpos[keyframe_id]
+        self.stand_up_and_down_actions.FL = goDown_qpos[7:10]
+        self.stand_up_and_down_actions.FR = goDown_qpos[10:13]
+        self.stand_up_and_down_actions.RL = goDown_qpos[13:16]
+        self.stand_up_and_down_actions.RR = goDown_qpos[16:19]
+        self.joint_positions = goDown_qpos[7:19]
 
 
         # Interactive Command Line ----------------------------
@@ -122,6 +123,13 @@ class Basic_Locomotion_DLS_Isaaclab_Node():
 
         self.joint_positions = np.array(msg.joint_positions)
         self.joint_velocities = np.array(msg.joint_velocities)
+
+        if(config.robot == "aliengo"):
+            # Fix convention
+            self.joint_positions[0] = -self.joint_positions[0]
+            self.joint_positions[6] = -self.joint_positions[6]
+            self.joint_velocities[0] = -self.joint_velocities[0]
+            self.joint_velocities[6] = -self.joint_velocities[6]
 
         self.first_message_base_arrived = True
         self.first_message_joints_arrived = True
@@ -172,6 +180,9 @@ class Basic_Locomotion_DLS_Isaaclab_Node():
         joints_pos.FR = qpos[env.legs_qpos_idx.FR]
         joints_pos.RL = qpos[env.legs_qpos_idx.RL]
         joints_pos.RR = qpos[env.legs_qpos_idx.RR]
+
+        # variable saved for goDown and goUp motion
+        self.joint_positions = np.concatenate([joints_pos.FL, joints_pos.FR, joints_pos.RL, joints_pos.RR], axis=0).flatten()
     
         joints_vel = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
         joints_vel.FL = qvel[env.legs_qvel_idx.FL]
@@ -195,13 +206,18 @@ class Basic_Locomotion_DLS_Isaaclab_Node():
 
         elif(self.console.isRLActivated):
 
-            desired_joint_pos = locomotion_policy.compute_control(base_pos=base_pos, 
-                                                                    base_ori_euler_xyz=base_ori_euler_xyz, base_quat_wxyz=base_quat_wxyz,
-                                                                    base_lin_vel=base_lin_vel, base_ang_vel=base_ang_vel,
-                                                                    heading_orientation_SO3=heading_orientation_SO3,
-                                                                    joints_pos=joints_pos, joints_vel=joints_vel,
-                                                                    ref_base_lin_vel=ref_base_lin_vel, ref_base_ang_vel=ref_base_ang_vel)
-            
+            desired_joint_pos = locomotion_policy.compute_control(
+                        base_pos=base_pos, 
+                        base_ori_euler_xyz=base_ori_euler_xyz, 
+                        base_quat_wxyz=base_quat_wxyz,
+                        base_lin_vel=base_lin_vel, 
+                        base_ang_vel=base_ang_vel,
+                        heading_orientation_SO3=heading_orientation_SO3,
+                        joints_pos=joints_pos, 
+                        joints_vel=joints_vel,
+                        ref_base_lin_vel=ref_base_lin_vel, 
+                        ref_base_ang_vel=ref_base_ang_vel)
+
             # Impedence Loop
             Kp = locomotion_policy.Kp_walking
             Kd = locomotion_policy.Kd_walking
@@ -241,8 +257,15 @@ class Basic_Locomotion_DLS_Isaaclab_Node():
                 action[self.env.legs_tau_idx.RR] = tau.RR.reshape((3,))
                 self.env.step(action=action)
  
+ 
+        if(config.robot == "aliengo"):
+            # Fix convention
+            desired_joint_pos.FL[0] = -desired_joint_pos.FL[0]
+            desired_joint_pos.RL[0] = -desired_joint_pos.RL[0] 
 
         rl_signal_out_msg = rl_signal_out()
+        rl_signal_out_msg.kp = np.ones(12)*Kp
+        rl_signal_out_msg.kd = np.ones(12)*Kd
         rl_signal_out_msg.desired_joint_positions = np.concatenate([desired_joint_pos.FL, desired_joint_pos.FR, desired_joint_pos.RL, desired_joint_pos.RR], axis=0).flatten()
         self.publisher.publish(rl_signal_out_msg)
         

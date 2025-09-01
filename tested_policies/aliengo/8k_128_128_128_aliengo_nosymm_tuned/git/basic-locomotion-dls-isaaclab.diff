@@ -1,0 +1,38 @@
+--- git status ---
+HEAD detached from dc9bbf2
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/assets/aliengo_asset.py
+	modified:   source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/tasks/locomotion/agents/rsl_rl_ppo_cfg.py
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/assets/aliengo_asset.py b/source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/assets/aliengo_asset.py
+index 8fe4c65..01738f3 100644
+--- a/source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/assets/aliengo_asset.py
++++ b/source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/assets/aliengo_asset.py
+@@ -12,7 +12,7 @@ from basic_locomotion_dls_isaaclab.assets import ISAAC_ASSET_DIR
+ 
+ 
+ # Aliengo robot configuration from mujoco
+-stiffness_mujoco = 25.0
++stiffness_mujoco = 20.0
+ damping_mujoco = 2.0
+ friction_static_mujoco = 0.2
+ friction_dynamic_mujoco = 0.6
+diff --git a/source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/tasks/locomotion/agents/rsl_rl_ppo_cfg.py b/source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/tasks/locomotion/agents/rsl_rl_ppo_cfg.py
+index ed6db40..82aba1f 100644
+--- a/source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/tasks/locomotion/agents/rsl_rl_ppo_cfg.py
++++ b/source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/tasks/locomotion/agents/rsl_rl_ppo_cfg.py
+@@ -137,7 +137,7 @@ class RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
+         activation="elu",
+     )
+     algorithm = RslRlPpoAlgorithmCfg(
+-        class_name="PPO", #PPO, PPOSymmDataAugmented #AMP_PPO
++        class_name="PPOSymmDataAugmented", #PPO, PPOSymmDataAugmented #AMP_PPO
+         value_loss_coef=1.0,
+         use_clipped_value_loss=True,
+         clip_param=0.2,

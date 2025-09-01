@@ -95,20 +95,12 @@ class LocomotionPolicyWrapper:
         # Desired joint vector
         self.desired_joint_pos = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
 
-        
 
-
-    def compute_control(self, base_pos, base_ori_euler_xyz, base_quat_wxyz,
-                        base_lin_vel, base_ang_vel, heading_orientation_SO3,
-                        joints_pos, joints_vel,
-                        ref_base_lin_vel, ref_base_ang_vel,
-                        heightmap_data=None):
-
-        # Update Observation ----------------------        
+    def _get_projected_gravity(self, quat_wxyz):        
         # Get the projected gravity in the base frame
         GRAVITY_VEC_W = torch.tensor((0, 0, -9.81), dtype=torch.double)
         GRAVITY_VEC_W = GRAVITY_VEC_W / GRAVITY_VEC_W.norm(p=2, dim=-1).clamp(min=1e-9, max=None).unsqueeze(-1)
-        q = torch.tensor(base_quat_wxyz).view(1, 4)
+        q = torch.tensor(quat_wxyz).view(1, 4)
         v = GRAVITY_VEC_W.clone().detach().view(1, 3)
         q_w = q[..., 0]
         q_vec = q[..., 1:]
@@ -119,8 +111,24 @@ class LocomotionPolicyWrapper:
             c = q_vec * torch.bmm(q_vec.view(q.shape[0], 1, 3), v.view(q.shape[0], 3, 1)).squeeze(-1) * 2.0
         else:
             c = q_vec * torch.einsum("...i,...i->...", q_vec, v).unsqueeze(-1) * 2.0
-        base_projected_gravity =  a - b + c
-        base_projected_gravity = base_projected_gravity.numpy().flatten()
+        projected_gravity =  a - b + c
+        return projected_gravity.numpy().flatten()
+
+    def compute_control(self, 
+            base_pos, 
+            base_ori_euler_xyz, 
+            base_quat_wxyz,
+            base_lin_vel, 
+            base_ang_vel, 
+            heading_orientation_SO3,
+            joints_pos, 
+            joints_vel,
+            ref_base_lin_vel, 
+            ref_base_ang_vel,
+            heightmap_data=None):
+
+        # Update Observation ----------------------        
+        base_projected_gravity = self._get_projected_gravity(base_quat_wxyz)
         
 
         # Get the reference base velocity in the world frame
@@ -176,11 +184,15 @@ class LocomotionPolicyWrapper:
             height_data = height_data.clip(-1.0, 1.0)
             obs = np.concatenate((obs, height_data), axis=0)
             
+        
+        # RL Prediction
         obs = obs.reshape(1, -1)
         obs = obs.astype(np.float32)
         rl_action_temp = self.policy.run(None, {'obs': obs})[0][0]
         rl_action_temp = np.clip(rl_action_temp, -self.desired_clip_actions, self.desired_clip_actions)
         
+
+        # Action Filtering
         if(self.use_action_filter):
             alpha = 0.8
             past_rl_actions_temp = self.past_rl_actions.copy()
