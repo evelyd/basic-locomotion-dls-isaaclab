@@ -105,22 +105,16 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
             torch.any((foot_positions[:, -2:, 2] - self._get_heights_at_points(foot_positions[:, -2:, :2])) > self.init_feet_positions[:, -2:, 2] + 0.06, dim=-1)
         )
 
-        # if self.stand_air_buf[0]:
-        #     terrain_heights = self._get_heights_at_points(foot_positions[:, -2:, :2])
-        #     print(f"env 0 ep length: {self.episode_length_buf[0]}")
-        #     print(f"env 0 foot heights: {foot_positions[0, -2:, 2]}")
-        #     print(f"env 0 terrain heights: {terrain_heights[0, :]}")
-        #     print(f"env 0 ht thresh: {self.init_feet_positions[0, -2:, 2] + 0.06}")
-        #     input("check")
-
         self.abrupt_change_buf = torch.logical_and(
             torch.logical_and(self.episode_length_buf > 3, self.episode_length_buf <= self.cfg.reward_allow_contact_steps),
             torch.any(torch.abs(self._robot.data.joint_pos - self.last_joint_pos) > self.cfg.max_dof_change, dim=-1)
         )
 
         all_conditions = torch.stack([
-            # self.term_contact_buf,
-            self.mercy_contact_buf, self.position_protect_buf, self.stand_air_buf, self.abrupt_change_buf])
+            self.mercy_contact_buf,
+            self.position_protect_buf,
+            self.stand_air_buf,
+            self.abrupt_change_buf])
         resets = torch.any(all_conditions, dim=0)
 
         return resets

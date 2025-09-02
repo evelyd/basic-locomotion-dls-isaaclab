@@ -139,7 +139,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
 
         # Filter the action
         if(self.cfg.use_filter_actions):
-            alpha = 0.8
+            alpha = 0.5
             temp = alpha * self._actions + (1 - alpha) * self._previous_actions
             self._processed_actions = self.cfg.action_scale * temp + self._robot.data.default_joint_pos
         else:
@@ -380,12 +380,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
         self._swing_peak[env_ids] = torch.tensor([0.0, 0.0, 0.0, 0.0], device=self.device)
 
         # Reset robot state
-        #TODO in stand dance env there is _reset_rand and I've ignored it for now
-        joint_pos = self._robot.data.default_joint_pos[env_ids]
-        joint_vel = self._robot.data.default_joint_vel[env_ids]
-        default_root_state = self._robot.data.default_root_state[env_ids]
-        default_root_state[:, :3] += self._terrain.env_origins[env_ids]
-        default_root_state[:, 3:7] = math_utils.random_yaw_orientation(env_ids.shape[0], device=self.device)
+        joint_pos, joint_vel, default_root_state = self._reset_robot_states(env_ids)
         self._robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
         self._robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
@@ -545,6 +540,54 @@ class SymmlocoCommonEnv(DirectRLEnv):
         """
         resets = torch.any(torch.norm(self._contact_sensor.data.net_forces_w[:, self._termination_ids, :], dim=-1) > 1., dim=1)
         return resets
+
+    def _reset_robot_states(self, env_ids):
+        joint_pos, joint_vel = self._reset_dofs_rand(env_ids)
+        default_root_state = self._reset_root_states_rand(env_ids)
+
+        return joint_pos, joint_vel, default_root_state
+
+    def _reset_dofs_rand(self, env_ids):
+        """ Resets DOF position and velocities of selected environmments
+        Positions are randomly selected within 0.5:1.5 x default positions.
+        Velocities are set to zero.
+
+        Args:
+            env_ids (List[int]): Environemnt ids
+        """
+        if not self.cfg.init_state_randomize_rot:
+            joint_pos = self._robot.data.default_joint_pos[env_ids] + torch_rand_float(-0.1, 0.1, self._robot.data.default_joint_pos[env_ids].shape, device=self.device)
+        else:
+            joint_pos = self._robot.data.joint_pos_limits[..., 0] + (
+                self._robot.data.joint_pos_limits[..., 1] - self._robot.data.joint_pos_limits[..., 0]) * torch_rand_float(
+                    0.0, 1.0, self._robot.data.default_joint_pos[env_ids].shape, device=self.device
+                )
+        joint_vel = torch_rand_float(-0.1, 0.1, self._robot.data.default_joint_pos[env_ids].shape, device=self.device)
+
+        return joint_pos, joint_vel
+
+    def _reset_root_states_rand(self, env_ids):
+        """ Resets ROOT states position and velocities of selected environmments
+            Sets base position based on the curriculum
+            Selects randomized base velocities within -0.5:0.5 [m/s, rad/s]
+        Args:
+            env_ids (List[int]): Environemnt ids
+        """
+        # base position
+        if(self._terrain.cfg.terrain_generator is not None and self._terrain.cfg.terrain_generator.curriculum == True):
+            default_root_state = self._robot.data.default_root_state[env_ids]
+            default_root_state[:, :3] += self._terrain.env_origins[env_ids]
+            default_root_state[:, :2] += torch_rand_float(-1., 1., (len(env_ids), 2), device=self.device) # xy position within 1m of the center
+        else:
+            default_root_state = self._robot.data.default_root_state[env_ids]
+            default_root_state[:, :3] += self._terrain.env_origins[env_ids]
+        if self.cfg.init_state_randomize_rot:
+            rand_rpy = torch_rand_float(-np.pi, np.pi, (len(env_ids), 3), device=self.device)
+            default_root_state[:, 3:7] = math_utils.quat_from_euler_xyz(rand_rpy[:, 0], rand_rpy[:, 1], rand_rpy[:, 2])
+        # base velocities
+        default_root_state[:, 7:13] = torch_rand_float(-0.1, 0.1, (len(env_ids), 6), device=self.device) # [7:10]: lin vel, [10:13]: ang vel
+
+        return default_root_state
 
     #------------ reward functions----------------
     def _reward_lin_vel_z(self):

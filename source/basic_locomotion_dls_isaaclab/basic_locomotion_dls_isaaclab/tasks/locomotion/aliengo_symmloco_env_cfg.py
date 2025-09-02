@@ -517,9 +517,9 @@ class AliengoEventCfg:
     push_robot = EventTermCfg(
         func=mdp.push_by_setting_velocity,
         mode="interval",
-        interval_range_s=(10.0, 15.0),
-        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "z": (-0.5, 0.5),
-                                   "roll": (-0.5, 0.5), "pitch": (-0.5, 0.5), "yaw": (-0.5, 0.5)}},
+    interval_range_s=(15.0, 15.0), # interval 15 in isaacgym
+        params={"velocity_range": {"x": (-1.0, 1.0), "y": (-1.0, 1.0), "z": (-0.0, 0.0), # -1, 1 in isaacgym, z not used
+                                   "roll": (-0.0, 0.0), "pitch": (-0.0, 0.0), "yaw": (-0.0, 0.0)}}, # not used in isaacgym
     )
 
     # zero command velocity
@@ -842,6 +842,8 @@ class AliengoStandDanceDirectEnvCfg(DirectRLEnvCfg):
             "heading": [-0.5 * np.pi, 0.5 * np.pi],
         }
     )
+
+    init_state_randomize_rot = (INIT_POSE == "upright")
 
     reward_curriculum = (INIT_POSE == "sit")
     reward_cl_init = 0.6
