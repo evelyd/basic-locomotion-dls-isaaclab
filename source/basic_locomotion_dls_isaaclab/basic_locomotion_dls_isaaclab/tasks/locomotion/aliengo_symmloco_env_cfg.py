@@ -848,10 +848,10 @@ class AliengoStandDanceDirectEnvCfg(DirectRLEnvCfg):
     reward_curriculum = (INIT_POSE == "sit")
     reward_cl_init = 0.6
     reward_cl_step = 0.2
-    reward_allow_contact_steps = 30 if (INIT_POSE == "upright") else 30 if (INIT_POSE == "sit") else 50
+    reward_allow_contact_steps = 0 if (INIT_POSE == "upright") else 30 if (INIT_POSE == "sit") else 50
     reward_kappa_gait_probs = 0.07
 
-    reward_base_height_target = 1.
+    reward_base_height_target = 0.54
     reward_soft_dof_vel_limit = 1.
     reward_max_contact_force = 100.
     control_action_scale = 0.5 # TODO in isaacgym also used for other stuff, here only used in reward
@@ -859,8 +859,8 @@ class AliengoStandDanceDirectEnvCfg(DirectRLEnvCfg):
 
     # Stand dance specific
     reward_tracking_liftup_sigma = 0.03
-    reward_liftup_target = 0.6 #TODO change to fit aliengo dims
-    reward_lift_up_threshold = [0.15, 0.6] #TODO change to fit aliengo dims
+    reward_liftup_target = reward_base_height_target
+    reward_lift_up_threshold = [0.23, reward_base_height_target]
     reward_tracking_sigma = 0.05
     reward_scale_factor_low = 0.25
     reward_scale_factor_high = 0.35

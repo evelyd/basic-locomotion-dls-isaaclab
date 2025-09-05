@@ -134,6 +134,16 @@ class SymmlocoCommonEnv(DirectRLEnv):
         self._previous_actions = self._actions.clone()
         self._actions = actions.clone()
 
+        # Sample new commands
+        resample_ids = (self.episode_length_buf % int(self.cfg.command_resampling_time / self.step_dt)==0).nonzero(as_tuple=False).flatten()
+        self._resample_commands(resample_ids)
+
+        # Update contact targets
+        self._step_contact_targets()
+
+        # Recompute the angular velocity command based on the current heading
+        self._recompute_ang_vel()
+
         # Clip the action
         self._actions = torch.clamp(self._actions, -self.cfg.desired_clip_actions, self.cfg.desired_clip_actions)
 
@@ -297,7 +307,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
 
         rewards = {}
 
-        for reward_name, weight in self.cfg.rewards.scales.items():
+        for reward_name, weight in self._reward_scales.items():
             # Construct the name of the reward function
             reward_func_name = f"_reward_{reward_name}"
             reward_func = getattr(self, reward_func_name, None)
@@ -317,8 +327,8 @@ class SymmlocoCommonEnv(DirectRLEnv):
         clipped_reward = torch.clip(reward, min=0.0)
 
         # Add termination reward after clipping
-        if "termination" in self.cfg.rewards.scales:
-            termination_rew = self._reward_termination() * self.cfg.rewards.scales["termination"] * self.step_dt
+        if "termination" in self._reward_scales:
+            termination_rew = self._reward_termination() * self._reward_scales["termination"] * self.step_dt
             clipped_reward += termination_rew
 
         # Accumulate the clipped reward to the episode sum buffer
@@ -376,6 +386,9 @@ class SymmlocoCommonEnv(DirectRLEnv):
         # Update contact targets
         self._step_contact_targets()
 
+        # Recompute angular velocity command based on new heading
+        self._recompute_ang_vel()
+
         # Reset swing peak
         self._swing_peak[env_ids] = torch.tensor([0.0, 0.0, 0.0, 0.0], device=self.device)
 
@@ -413,7 +426,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
         avg_tracking_lin_vel = extras["log"].get("Episode_Reward/tracking_lin_vel", 0.0)
 
         # Normalize the reward sum
-        normalized_lin_vel_reward = avg_tracking_lin_vel / self.cfg.rewards.scales["tracking_lin_vel"]
+        normalized_lin_vel_reward = avg_tracking_lin_vel / self._reward_scales["tracking_lin_vel"]
 
         # Apply the curriculum logic
         if normalized_lin_vel_reward > 0.8:
@@ -473,6 +486,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
             return torch.from_numpy(np.random.choice(candidates, size=shape), dtype=torch.float).to(self.device)
 
     def _step_contact_targets(self):
+        # order of feet: ['FL_foot', 'FR_foot', 'RL_foot', 'RR_foot']
 
         frequencies = self.cfg.default_gait_freq
         phases = 0.5
@@ -678,10 +692,10 @@ class SymmlocoCommonEnv(DirectRLEnv):
     def _reward_dof_pos_limits(self):
         # Penalize dof positions too close to the limit
         out_of_limits = -(
-            self._robot.data.joint_pos - (self._robot.data.joint_pos_limits[:, :, 0] + 5 / 180 * np.pi)
+            self._robot.data.joint_pos - (self._robot.data.soft_joint_pos_limits[:, :, 0])
         ).clip(max=0.0)
         out_of_limits += (
-            self._robot.data.joint_pos - (self._robot.data.joint_pos_limits[:, :, 1] - 5 / 180 * np.pi)
+            self._robot.data.joint_pos - (self._robot.data.soft_joint_pos_limits[:, :, 1])
         ).clip(min=0.0)
 
         return torch.sum(out_of_limits, dim=1)

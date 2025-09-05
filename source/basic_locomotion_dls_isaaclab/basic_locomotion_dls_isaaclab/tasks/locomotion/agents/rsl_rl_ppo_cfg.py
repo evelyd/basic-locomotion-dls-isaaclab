@@ -127,7 +127,7 @@ class FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
 class RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 8000
-    save_interval = 50
+    save_interval = 300 #50
     experiment_name = "rough_direct"
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
