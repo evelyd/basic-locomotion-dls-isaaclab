@@ -93,6 +93,11 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
                 self.episode_length_buf <= self.cfg.reward_allow_contact_steps
             ))
         )
+        # only allow calf contact before the agent is pretty much balanced
+        self.calf_contact_buf = torch.logical_and(
+                torch.any(torch.norm(self._contact_sensor.data.net_forces_w[:, self._calf_ids, :], dim=-1) > 1., dim=1),
+                self.episode_length_buf > (2 * self.cfg.reward_allow_contact_steps)
+            )
         self.position_protect_buf = torch.logical_and(
             self.episode_length_buf > 3, torch.any(torch.logical_or(
             self._robot.data.joint_pos < self._robot.data.joint_pos_limits[:, :, 0] + 5 / 180 * np.pi,
@@ -112,6 +117,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
 
         all_conditions = torch.stack([
             self.mercy_contact_buf,
+            self.calf_contact_buf,
             self.position_protect_buf,
             self.stand_air_buf,
             self.abrupt_change_buf])

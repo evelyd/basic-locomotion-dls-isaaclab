@@ -36,7 +36,7 @@ from basic_locomotion_dls_isaaclab.assets.aliengo_asset import ALIENGO_CFG
 
 
 # --- Global Flags ---
-USE_VEL_CMD = True
+USE_VEL_CMD = False #True
 OBS_T = False
 INIT_POSE = "sit"
 
@@ -829,6 +829,7 @@ class AliengoStandDanceDirectEnvCfg(DirectRLEnvCfg):
     command_cl_init = 0.6
     command_cl_step = 0.2
     command_max_curriculum = 1.
+    command_resampling_time = 10.
 
     @configclass
     class MyCommandsCfg:
@@ -836,10 +837,14 @@ class AliengoStandDanceDirectEnvCfg(DirectRLEnvCfg):
 
     commands: MyCommandsCfg = MyCommandsCfg(
         ranges={
-            "lin_vel_x": [-0.3, 0.3],
+            # "lin_vel_x": [-0.3, 0.3],
+            # "lin_vel_y": [-0.0, 0.0],
+            # "ang_vel_z": [-0.3, 0.3],
+            "lin_vel_x": [-0.0, 0.0],
             "lin_vel_y": [-0.0, 0.0],
-            "ang_vel_z": [-0.3, 0.3],
-            "heading": [-0.5 * np.pi, 0.5 * np.pi],
+            "ang_vel_z": [-0.0, 0.0],
+            # "heading": [-0.5 * np.pi, 0.5 * np.pi],
+            "heading": [0.0, 0.0],
         }
     )
 
@@ -855,7 +860,7 @@ class AliengoStandDanceDirectEnvCfg(DirectRLEnvCfg):
     reward_soft_dof_vel_limit = 1.
     reward_max_contact_force = 100.
     control_action_scale = 0.5 # TODO in isaacgym also used for other stuff, here only used in reward
-    reward_upright_vec = [0.2, 0.0, 1.0]
+    reward_upright_vec = [0.0, 0.0, 1.0]
 
     # Stand dance specific
     reward_tracking_liftup_sigma = 0.03
@@ -878,7 +883,7 @@ class AliengoStandDanceDirectEnvCfg(DirectRLEnvCfg):
         scales={
             "feet_slip": feet_slip_wt,
             "feet_clearance_cmd_linear": -300,
-            "collision": -2.0,
+            "collision": -2.0e2,
             "torque_limits": -0.01,
             "tracking_lin_vel": 0.8,
             "tracking_ang_vel": 0.5,
@@ -889,14 +894,14 @@ class AliengoStandDanceDirectEnvCfg(DirectRLEnvCfg):
             "dof_vel": -1e-4,
             "dof_acc": -2.5e-7,
             "dof_pos_limits": -10,
-            "upright": 1.2,
-            "lift_up_linear": 0.8,
-            # "time_upright": 10.0, # new
+            "upright": 1.2e2,
+            "lift_up_linear": 0.8e2,
+            "time_upright": 500, # new
             "foot_twist": -0,
             "foot_shift": -50,
             # "termination": -50.0,
-            "lin_vel_z": -2.0,
-            "ang_vel_xy": -0.05,
+            "lin_vel_z": -2.0e5,
+            "ang_vel_xy": -0.05e5,
             "orientation": -0.,
             "torques": -0.00001,
             "base_height": -0.,

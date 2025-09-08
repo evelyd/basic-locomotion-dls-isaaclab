@@ -462,7 +462,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
         # relatively sample
         cur_heading = self._get_cur_heading()[env_ids]
         self._commands[env_ids, 3] = cur_heading + torch_rand_float(
-            self._command_ranges["heading"][0], self._command_ranges["heading"][1],
+            self.cfg.commands.ranges["heading"][0], self.cfg.commands.ranges["heading"][1],
             (len(env_ids), 1), device=self.device).squeeze(1)
 
     def _sample_fn(self, mode: str, support: list, shape, low: float = None, high: float = None):
@@ -607,18 +607,30 @@ class SymmlocoCommonEnv(DirectRLEnv):
     def _reward_lin_vel_z(self):
         # Penalize z axis base linear velocity
         reward = torch.square(self._robot.data.root_lin_vel_b[:, 2])
+
+        forward = math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)
+        reward_upright_vec = torch.tensor(self.cfg.reward_upright_vec, device=self.device).unsqueeze(0).expand(self.num_envs, -1)
+        upright_vec = custom_utils.quat_apply_yaw(self._robot.data.root_quat_w, reward_upright_vec)
+        is_stand = (torch.sum(forward * upright_vec, dim=-1) / torch.norm(upright_vec, dim=-1)) > 0.9
+
         # is_in_collision = torch.any(torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 0.1, dim=1)
         # base_in_collision = torch.norm(self.contact_forces[:, self.base_contact_indice, :], dim=-1) > 0.1
         base_in_collision = torch.any(torch.norm(self._contact_sensor.data.net_forces_w[:, self._base_id, :], dim=-1) > 0.1, dim=-1).float()
-        reward = reward * (1 - base_in_collision.float())
+        reward = reward * (1 - base_in_collision.float()) * is_stand.float()
         return reward
 
     def _reward_ang_vel_xy(self):
         # Penalize xy axes base angular velocity
         reward = torch.sum(torch.square(self._robot.data.root_ang_vel_b[:, :2]), dim=1)
+
+        forward = math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)
+        reward_upright_vec = torch.tensor(self.cfg.reward_upright_vec, device=self.device).unsqueeze(0).expand(self.num_envs, -1)
+        upright_vec = custom_utils.quat_apply_yaw(self._robot.data.root_quat_w, reward_upright_vec)
+        is_stand = (torch.sum(forward * upright_vec, dim=-1) / torch.norm(upright_vec, dim=-1)) > 0.9
+
         # is_in_collision = torch.any(torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 0.1, dim=1)
         base_in_collision = torch.any(torch.norm(self._contact_sensor.data.net_forces_w[:, self._base_id, :], dim=-1) > 0.1, dim=-1).float()
-        reward = reward * (1 - base_in_collision.float())
+        reward = reward * (1 - base_in_collision.float()) * is_stand.float()
         return reward
 
     def _reward_orientation(self):
