@@ -22,6 +22,7 @@ from .locomotion_env import AliengoFlatEnvCfg, AliengoRoughVisionEnvCfg, Aliengo
 from .stand_dance_env import StandDanceEnv
 from .stand_dance_direct_env import AliengoStandDanceEnv
 from .aliengo_symmloco_env_cfg import AliengoStandDanceEnvCfg, AliengoStandDanceDirectEnvCfg
+from .go2_symmloco_env_cfg import Go2StandDanceDirectEnvCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 gym.register(
@@ -40,6 +41,16 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": AliengoStandDanceDirectEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:StandDanceCfgPPO",
+    },
+)
+
+gym.register(
+    id="Stand-Dance-Go2-Flat-Direct",
+    entry_point=AliengoStandDanceEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": Go2StandDanceDirectEnvCfg,
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:StandDanceCfgPPO",
     },
 )
