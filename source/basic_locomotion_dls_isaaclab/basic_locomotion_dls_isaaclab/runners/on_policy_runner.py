@@ -59,6 +59,8 @@ class OnPolicyRunner:
         obs, extras = self.env.get_observations()
         num_obs = obs.shape[1]
 
+        history_length = env.cfg['history_length'] if 'history_length' in env.cfg else 1
+
         # resolve type of privileged observations
         if self.training_type == "rl":
             if "critic" in extras["observations"]:
@@ -146,6 +148,7 @@ class OnPolicyRunner:
                 policy=policy,
                 device=self.device,
                 G=G,
+                history_length=history_length,
                 **self.alg_cfg,
             )
         elif "dae" in alg_class.__name__.lower():
@@ -278,7 +281,7 @@ class OnPolicyRunner:
                         if "stand-dance" in self.task.lower():
                             raise NotImplementedError("DAE not implemented for Stand-Dance task yet.")
                         else:
-                            states = obs[:, -self.alg.state_dim:]
+                            states = obs[:, (self.alg.history_length - 1) * self.alg.state_dim: self.alg.history_length * self.alg.state_dim]
                         current_states_for_dae = states.clone()
                         current_actions_for_dae = actions.clone()
 
@@ -303,7 +306,7 @@ class OnPolicyRunner:
                         if "stand-dance" in self.task.lower():
                             raise NotImplementedError("DAE not implemented for Stand-Dance task yet.")
                         else:
-                            next_states = obs[:, -self.alg.state_dim:]
+                            next_states = obs[:, (self.alg.history_length - 1) * self.alg.state_dim: self.alg.history_length * self.alg.state_dim]
                         next_states_for_dae = next_states.clone()
 
                         # Fill the PER buffer

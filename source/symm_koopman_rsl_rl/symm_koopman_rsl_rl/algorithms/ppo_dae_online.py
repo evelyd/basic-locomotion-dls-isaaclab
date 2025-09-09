@@ -51,6 +51,7 @@ class PPODAEOnline(PPO):
                  koopman_cfg,
                  dt,
                  G: escnn.group.groups.cyclicgroup.CyclicGroup,
+                 history_length=1,
                  num_learning_epochs=1,
                  num_mini_batches=1,
                  clip_param=0.2,
@@ -103,6 +104,8 @@ class PPODAEOnline(PPO):
         self.state_dim = koopman_cfg["robot"]["state_dim"]
         self.action_dim = koopman_cfg["robot"]["action_dim"]
 
+        self.history_length = history_length
+
         self.task = task
         # Initialize DAE model
         self.dae_model = initialize_dae_model(
@@ -136,7 +139,7 @@ class PPODAEOnline(PPO):
 
     def get_critic_input(self, critic_obs):
         """Processes critic_obs through DAE to get augmented input for the critic."""
-        dae_input = critic_obs[:, 2*self.state_dim:3*self.state_dim] # most recent state, works with and without priv obs
+        dae_input = critic_obs[:, (self.history_length - 1) * self.state_dim:self.history_length * self.state_dim] # most recent state, works with and without priv obs
         dae_input = dae_input.to(dtype=next(self.dae_model.parameters()).dtype)
         dae_input = dae_input.to(device=next(self.dae_model.parameters()).device)
 
