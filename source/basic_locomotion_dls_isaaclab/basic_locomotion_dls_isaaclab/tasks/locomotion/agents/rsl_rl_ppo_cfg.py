@@ -199,6 +199,123 @@ class RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
 @configclass
+class FlatPPOEMLPRunnerCfg(FlatPPORunnerCfg):
+    """Runner configuration for locomotion with EMLP."""
+
+    experiment_name = "locomotion-flat-emlp"
+    wandb_project = experiment_name
+
+    policy = RslRlPpoActorCriticCfg(
+        class_name="ActorCriticSymm",
+        init_noise_std=1.0,
+        actor_hidden_dims=[128, 128, 128],
+        critic_hidden_dims=[128, 128, 128],
+        activation="elu",
+    )
+
+@configclass
+class KoopmanCfg:
+    model: dict[str, list[float]] = MISSING
+    robot: dict[str, list[float]] = MISSING
+
+@configclass
+class FlatPPOCDAEOnlineRunnerCfg(FlatPPORunnerCfg):
+    """Runner configuration for ErgoCub with online C-DAE. Only defined for non-ideal velocity task."""
+
+    experiment_name = "locomotion-flat-cdae-online"
+    wandb_project = experiment_name
+
+    algorithm = RslRlPpoAlgorithmCfg(
+        class_name="PPODAEOnline", #PPO, PPOSymmDataAugmented #AMP_PPO
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.005,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="fixed", #fixed, adaptive
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+    )
+
+    koopman = KoopmanCfg(
+        model={'name': 'cdae',
+               'equivariant': False,
+               'activation': 'ELU',
+               'num_layers': 5,
+               'num_hidden_units': 128,
+               'batch_norm': False,
+               'obs_pred_w': 1.0,
+               'orth_w': 0.0,
+               'corr_w': 0.0,
+               'bias': True,
+               'constant_function': True,
+               'num_mini_batches': 8,
+               'mini_batch_size': 256,
+               'beta_initial': 0.4,
+               'beta_annealing_steps': 4000},
+        robot={'name': 'aliengo',
+                'lr': 1e-3,
+                'max_epochs': 200,
+                'obs_state_ratio': 2,
+                'state_obs': ['base_lin_vel', 'base_ang_vel', 'projected_gravity', 'velocity_commands_xy', 'velocity_commands_z', 'joint_pos', 'joint_vel', 'prev_action', 'clock_data'],
+                'action_obs': ['action'],
+                'state_dim': 3 + 3 + 14 + 14 + 14 + 2 + 1 + 3 * (57 - 14),
+                'action_dim': 14 + (57 - 14),
+                'pred_horizon': 5,
+                'frames_per_state': 1},
+    )
+
+@configclass
+class FlatPPOEMLPECDAEOnlineRunnerCfg(FlatPPOCDAEOnlineRunnerCfg):
+    """Runner configuration for ErgoCub with EC-DAE."""
+
+    experiment_name = "ergocub-amp-emlp-ecdae-online"
+    wandb_project = experiment_name
+
+    policy = RslRlPpoActorCriticCfg(
+        class_name="ActorCriticSymm",
+        init_noise_std=1.0,
+        actor_hidden_dims=[128, 128, 128],
+        critic_hidden_dims=[128, 128, 128],
+        activation="elu",
+    )
+
+    koopman = KoopmanCfg(
+        model={'name': 'ecdae',
+               'equivariant': False,
+               'activation': 'ELU',
+               'num_layers': 5,
+               'num_hidden_units': 128,
+               'batch_norm': False,
+               'obs_pred_w': 1.0,
+               'orth_w': 0.0,
+               'corr_w': 0.0,
+               'bias': True,
+               'constant_function': True,
+               'num_mini_batches': 8,
+               'mini_batch_size': 256,
+               'beta_initial': 0.4,
+               'beta_annealing_steps': 4000,
+               'equivariant': True,
+               'group_avg_trick': True,
+               'state_dependent_obs_dyn': False},
+        robot={'name': 'aliengo',
+                'lr': 1e-3,
+                'max_epochs': 200,
+                'obs_state_ratio': 2,
+                'state_obs': ['base_ang_vel', 'projected_gravity', 'joint_pos', 'joint_vel', 'prev_action', 'velocity_commands_xy', 'velocity_commands_z'],
+                'action_obs': ['action'],
+                'state_dim': 3 + 3 + 14 + 14 + 14 + 2 + 1 + 3 * (57 - 14),
+                'action_dim': 14 + (57 - 14),
+                'pred_horizon': 5,
+                'frames_per_state': 1},
+    )
+
+@configclass
 class LeggedRobotCfgPPO(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 1500

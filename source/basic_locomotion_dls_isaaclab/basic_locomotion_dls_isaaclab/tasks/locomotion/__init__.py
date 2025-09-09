@@ -66,6 +66,36 @@ gym.register(
 )
 
 gym.register(
+    id="Locomotion-Aliengo-Flat-EMLP",
+    entry_point=LocomotionEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": AliengoFlatEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:FlatPPOEMLPRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Locomotion-Aliengo-Flat-CDAE-Online",
+    entry_point=LocomotionEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": AliengoFlatEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:FlatPPOCDAEOnlineRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Locomotion-Aliengo-Flat-EMLP-ECDAE-Online",
+    entry_point=LocomotionEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": AliengoFlatEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:FlatPPOEMLPECDAEOnlineRunnerCfg",
+    },
+)
+
+gym.register(
     id="Locomotion-Aliengo-Rough-Blind",
     entry_point=LocomotionEnv,
     disable_env_checker=True,
