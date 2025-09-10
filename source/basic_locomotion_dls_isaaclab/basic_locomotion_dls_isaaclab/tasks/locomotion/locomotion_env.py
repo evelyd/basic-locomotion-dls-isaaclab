@@ -659,7 +659,7 @@ class LocomotionEnv(DirectRLEnv):
             obs_cuncurrent_state_est = self._observation_noise_model(obs_cuncurrent_state_est)   
 
         # Saving data
-        output_cuncurrent_state_est = torch.cat((self._robot.data.root_lin_vel_b), dim=-1)
+        output_cuncurrent_state_est = self._robot.data.root_lin_vel_b
         self._cuncurrent_state_est_network.dataset.add_sample(obs_cuncurrent_state_est, output_cuncurrent_state_est)
 
         # Prediction

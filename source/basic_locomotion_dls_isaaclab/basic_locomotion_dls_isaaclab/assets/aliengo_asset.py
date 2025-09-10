@@ -4,9 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import isaaclab.sim as sim_utils
-from basic_locomotion_dls_isaaclab.actuators import IdentifiedActuatorCfg
+from basic_locomotion_dls_isaaclab.actuators import IdentifiedActuatorElectricCfg
 from isaaclab.assets.articulation import ArticulationCfg
-from isaaclab.actuators import DCMotorCfg
 
 from basic_locomotion_dls_isaaclab.assets import ISAAC_ASSET_DIR
 
@@ -18,7 +17,7 @@ friction_static_mujoco = 0.2
 friction_dynamic_mujoco = 0.6
 armature_mujoco = 0.01
 
-ALIENGO_HIP_ACTUATOR_CFG = IdentifiedActuatorCfg(
+ALIENGO_HIP_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     joint_names_expr=[".*_hip_joint"],
     effort_limit=44.4,
     velocity_limit=21.0,
@@ -31,7 +30,7 @@ ALIENGO_HIP_ACTUATOR_CFG = IdentifiedActuatorCfg(
     friction_dynamic=friction_dynamic_mujoco,
 )
 
-ALIENGO_THIGH_ACTUATOR_CFG = IdentifiedActuatorCfg(
+ALIENGO_THIGH_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     joint_names_expr=[".*_thigh_joint"],
     effort_limit=44.4,
     velocity_limit=21.0,
@@ -44,7 +43,7 @@ ALIENGO_THIGH_ACTUATOR_CFG = IdentifiedActuatorCfg(
     friction_dynamic=friction_dynamic_mujoco,
 )
 
-ALIENGO_CALF_ACTUATOR_CFG = IdentifiedActuatorCfg(
+ALIENGO_CALF_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     joint_names_expr=[".*_calf_joint"],
     effort_limit=44.4,
     velocity_limit=21.0,
@@ -86,17 +85,7 @@ ALIENGO_CFG = ArticulationCfg(
         },
         joint_vel={".*": 0.0},
     ),
-    # actuators={
-    #    "base_legs": DCMotorCfg(
-    #        joint_names_expr=[".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
-    #        effort_limit=44.4,
-    #        saturation_effort=44.4,
-    #        velocity_limit=21.0,
-    #        stiffness=25.0,
-    #        damping=2,
-    #        friction=0.0,
-    #    ),
-    # },
+
     actuators={"hip": ALIENGO_HIP_ACTUATOR_CFG, "thigh": ALIENGO_THIGH_ACTUATOR_CFG, "calf": ALIENGO_CALF_ACTUATOR_CFG},
     soft_joint_pos_limit_factor=0.95,
 )

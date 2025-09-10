@@ -64,7 +64,7 @@ class EventCfg:
     )
     
 
-    scale_all_joint_friction_model = EventTerm(
+    """scale_all_joint_friction_model = EventTerm(
         func=custom_events.randomize_joint_friction_model,
         mode="startup",
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]), 
@@ -79,8 +79,35 @@ class EventCfg:
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]), 
                 "armature_distribution_params": (0.0, 1.0),
                 "operation": "scale"},
+    )"""
+
+    randomize_joint_parameters = EventTerm(
+        func=mdp.randomize_joint_parameters,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]), 
+            "friction_distribution_params": (0.2, 2.0),
+            "armature_distribution_params": (0.0, 1.0),
+            "operation": "scale",
+            "distribution": "uniform",
+        },
+    )
+
+    scale_all_joint_first_order_delay_filter_model = EventTerm(
+        func=custom_events.randomize_joint_delay_model,
+        mode="startup",
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]), 
+                "first_order_delay_filter_distribution_params": (0.1, 0.3),
+                "operation": "abs"},
     )
     
+    scale_all_joint_second_order_delay_filter_model = EventTerm(
+        func=custom_events.randomize_joint_delay_model,
+        mode="startup",
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]), 
+                "second_order_delay_filter_distribution_params": (0.1, 0.3),
+                "operation": "abs"},
+    )
 
 
     actuator_gains = EventTerm(
@@ -88,8 +115,8 @@ class EventCfg:
     mode="reset",
     params={
         "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-        "stiffness_distribution_params": (-15.0, 15.0),
-        "damping_distribution_params": (-3.0, 3.0),
+        "stiffness_distribution_params": (-20.0, 20.0),
+        "damping_distribution_params": (-5.0, 5.0),
         "operation": "add",
         "distribution": "uniform",
     },
@@ -152,7 +179,6 @@ class HyQRealFlatEnvCfg(DirectRLEnvCfg):
     use_cuncurrent_state_est = False
     if(use_cuncurrent_state_est):
         cuncurrent_state_est_output_space = 3 #lin_vel_b
-        cuncurrent_state_est_output_space += 3 #ang_vel_b
         single_cuncurrent_state_est_observation_space = single_observation_space
         cuncurrent_state_est_observation_space = observation_space
         cuncurrent_state_est_batch_size = 32
@@ -164,11 +190,17 @@ class HyQRealFlatEnvCfg(DirectRLEnvCfg):
     if(use_rma):
         rma_output_space = 12 # P gain
         rma_output_space += 12 # D gain 
+        rma_output_space += 12 # friction static
+        rma_output_space += 12 # friction dynamic
+        rma_output_space += 12 # armature
+        single_rma_observation_space = single_observation_space
+        rma_observation_space = observation_space
         observation_space += rma_output_space
         rma_batch_size = 32
         rma_train_epochs = 500
         rma_lr = 1e-3
         rma_ep_saving_interval = 1000
+        
 
     use_filter_actions = True
 

@@ -9,20 +9,22 @@ import numpy as np
 np.set_printoptions(precision=3, suppress=True)
 
 from tqdm import tqdm
-import sys
-import os 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(dir_path+"/../")
-sys.path.append(dir_path+"/../scripts/rsl_rl")
-
-# Gym and Simulation related imports
-from gym_quadruped.utils.quadruped_utils import LegsAttr
-
 import mujoco
 import onnxruntime as ort
 import torch
 
 import config
+
+# Gym and Simulation related imports
+from gym_quadruped.utils.quadruped_utils import LegsAttr
+
+
+import sys
+import os 
+dir_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(dir_path+"/../")
+sys.path.append(dir_path+"/../source/basic_locomotion_dls_isaaclab/basic_locomotion_dls_isaaclab/tasks/")
+from supervised_learning_networks import load_network
 
 
 class LocomotionPolicyWrapper:
@@ -92,6 +94,17 @@ class LocomotionPolicyWrapper:
         if(self.use_vision):
             self.observation_space = 235
 
+        # RMA
+        if(config.use_rma == True):
+            self._rma_network = load_network(config.rma_network_path, device='cpu')
+            self._observation_history_rma = np.zeros((self.history_length, single_observation_space), dtype=np.float32)
+
+        # Learned State Estimator
+        if(config.use_cuncurrent_state_est == True):
+            self._cuncurrent_state_est_network = load_network(config.cuncurrent_state_est_network_path, device='cpu')
+            self._observation_history_cuncurrent_state_est = np.zeros((self.history_length, single_observation_space), dtype=np.float32)
+
+
         # Desired joint vector
         self.desired_joint_pos = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
 
@@ -114,6 +127,7 @@ class LocomotionPolicyWrapper:
         projected_gravity =  a - b + c
         return projected_gravity.numpy().flatten()
 
+
     def compute_control(self, 
             base_pos, 
             base_ori_euler_xyz, 
@@ -125,11 +139,21 @@ class LocomotionPolicyWrapper:
             joints_vel,
             ref_base_lin_vel, 
             ref_base_ang_vel,
+            imu_linear_acceleration=None,
+            imu_angular_velocity=None,
+            imu_orientation=None,
             heightmap_data=None):
 
         # Update Observation ----------------------        
-        base_projected_gravity = self._get_projected_gravity(base_quat_wxyz)
-        
+        if(config.use_imu or config.use_cuncurrent_state_est):
+            base_projected_gravity = self._get_projected_gravity(imu_orientation)
+            base_vel = imu_linear_acceleration
+            base_ang_vel = imu_angular_velocity
+        else:
+            base_projected_gravity = self._get_projected_gravity(base_quat_wxyz)
+            base_vel = base_lin_vel
+            base_ang_vel = base_ang_vel
+
 
         # Get the reference base velocity in the world frame
         ref_base_lin_vel_h = heading_orientation_SO3.T@ref_base_lin_vel
@@ -138,7 +162,7 @@ class LocomotionPolicyWrapper:
         # Fill the observation vector
         joints_pos_delta = joints_pos - self.default_joint_pos
         obs = np.concatenate([
-            base_lin_vel,
+            base_vel, # this could be imu linear acc if use_imu or linear vel from state est
             base_ang_vel,
             base_projected_gravity,
             ref_base_lin_vel_h[0:2],
@@ -162,11 +186,22 @@ class LocomotionPolicyWrapper:
             commands = np.array([ref_base_lin_vel_h[0], ref_base_lin_vel_h[1], ref_base_ang_vel[2]], dtype=np.float32)
             if(np.linalg.norm(commands) < 0.01):
                 obs[48:52] = -1.0
+
         
+        if(config.use_cuncurrent_state_est):
+            #the bottom element is the newest observation!!
+            past_cuncurrent_state_est = self._observation_history_cuncurrent_state_est[1:,:]
+            self._observation_history_cuncurrent_state_est = np.vstack((past_cuncurrent_state_est, copy.deepcopy(obs)))
+            obs_cuncurrent_state_est = self._observation_history_cuncurrent_state_est.flatten()
+            # QUERY THE NETOWRK
+            base_lin_vel_predicted = self._cuncurrent_state_est_network(torch.tensor(obs_cuncurrent_state_est, dtype=torch.float32).unsqueeze(0)).detach().numpy().squeeze()
+            obs[0:3] = base_lin_vel_predicted
+            
+            
         if(self.use_observation_history):
             #the bottom element is the newest observation!!
             past = self._observation_history[1:,:]
-            self._observation_history = np.vstack((past, obs))
+            self._observation_history = np.vstack((past, copy.deepcopy(obs)))
             obs = self._observation_history.flatten()
 
         

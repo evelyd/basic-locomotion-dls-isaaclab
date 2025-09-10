@@ -150,7 +150,6 @@ class B2FlatEnvCfg(DirectRLEnvCfg):
     use_cuncurrent_state_est = False
     if(use_cuncurrent_state_est):
         cuncurrent_state_est_output_space = 3 #lin_vel_b
-        cuncurrent_state_est_output_space += 3 #ang_vel_b
         single_cuncurrent_state_est_observation_space = single_observation_space
         cuncurrent_state_est_observation_space = observation_space
         cuncurrent_state_est_batch_size = 32
@@ -162,11 +161,17 @@ class B2FlatEnvCfg(DirectRLEnvCfg):
     if(use_rma):
         rma_output_space = 12 # P gain
         rma_output_space += 12 # D gain 
+        rma_output_space += 12 # friction static
+        rma_output_space += 12 # friction dynamic
+        rma_output_space += 12 # armature
+        single_rma_observation_space = single_observation_space
+        rma_observation_space = observation_space
         observation_space += rma_output_space
         rma_batch_size = 32
         rma_train_epochs = 500
         rma_lr = 1e-3
         rma_ep_saving_interval = 1000
+        
 
     use_filter_actions = True
 

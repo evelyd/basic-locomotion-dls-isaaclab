@@ -34,6 +34,7 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.labels[idx]
 
+
 class SimpleNN(torch.nn.Module):
     def __init__(self, in_features, out_features):
         super().__init__()
@@ -43,12 +44,14 @@ class SimpleNN(torch.nn.Module):
 
         self.dataset = CustomDataset(max_size=1000)
 
+
     def forward(self, x):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         x = self.fc3(x)
         return x
     
+
     def train_network(self, batch_size=512, epochs=1000, learning_rate=1e-3, device='cpu'):
         with torch.inference_mode(False):
             with torch.enable_grad():
@@ -82,6 +85,7 @@ class SimpleNN(torch.nn.Module):
     
                     print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item()}")
 
+
     def save_network(self, filepath, device='cpu'):
         """Save the network state dict to a file."""
         # Create directory if it doesn't exist
@@ -102,6 +106,28 @@ class SimpleNN(torch.nn.Module):
         
         # Move model back to original device
         self.to(original_device)
+
+
+def load_network(filepath, device='cpu'):
+    """Load the network state dict from a file."""
+    if not os.path.isfile(filepath):
+        raise FileNotFoundError(f"No such file: '{filepath}'")
+    
+    checkpoint = torch.load(filepath, map_location=device)
+    
+    input_features = checkpoint.get('input_features')
+    output_features = checkpoint.get('output_features')
+    if input_features is None or output_features is None:
+        raise ValueError("Checkpoint does not contain model architecture information.")
+    # Reinitialize the model with the correct architecture
+    model = SimpleNN(input_features, output_features)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.to(device)
+    model.eval()  # Set the model to evaluation mode
+    
+    print(f"Network loaded from {filepath}")
+    return model
+    
     
 
 

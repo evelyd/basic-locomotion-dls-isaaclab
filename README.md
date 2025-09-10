@@ -12,7 +12,7 @@ Features:
 - [Cuncurrent State Estimator](https://arxiv.org/pdf/2202.05481)
 - [Rapid Motor Adaptation](https://arxiv.org/pdf/2107.04034)
 - [Morphological Symmetries](https://arxiv.org/pdf/2403.17320) 
-- [Adversarial Motion Priors](https://arxiv.org/pdf/2104.02180)
+- [Adversarial Motion Priors](https://arxiv.org/pdf/2104.02180) (big thanks to [Giuseppe L'erario](https://github.com/Giulero) and [Giulio Romualdi](https://github.com/giulioromualdi))
 - Sim-to-Sim in [Mujoco](https://github.com/google-deepmind/mujoco)
 - Sim-to-Real in ROS1 and ROS2
 
@@ -146,17 +146,25 @@ Remember to set in the application above, "set as default prim" to the root of t
 
 
 ```bash
-conda env create -f mamba_environment.yml
-conda activate basic_locomotion_dls_isaaclab_env
+conda env create -f mamba_environment_ros1.yaml
+conda activate basic_locomotion_dls_isaaclab_ros1_env
+
+conda env create -f mamba_environment_ros2.yaml
+conda activate basic_locomotion_dls_isaaclab_ros2_env
 ```
 
-3. Then you can run play_mujoco.py or run play_ros2.py
+3. Then you can 
 
 ```bash
 ## Sim-to-Sim
 python3 deploy/play_mujoco.py
 
-## Sim-to-Real
+## Sim-to-Real with ROS1
+cd deploy/ros1_ws
+catkin_make install -j4
+python3 deploy/play_ros1.py
+
+## Sim-to-Real with ROS2
 cd deploy/ros2_ws
 colcon build
 python3 deploy/play_ros2.py 

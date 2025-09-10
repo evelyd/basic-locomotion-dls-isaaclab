@@ -147,13 +147,12 @@ class Go2FlatEnvCfg(DirectRLEnvCfg):
 
     use_imu = False
 
-    use_cuncurrent_state_est = False
+    use_cuncurrent_state_est = True
     if(use_cuncurrent_state_est):
         cuncurrent_state_est_output_space = 3 #lin_vel_b
-        cuncurrent_state_est_output_space += 3 #ang_vel_b
         single_cuncurrent_state_est_observation_space = single_observation_space
         cuncurrent_state_est_observation_space = observation_space
-        cuncurrent_state_est_batch_size = 32
+        cuncurrent_state_est_batch_size = 8
         cuncurrent_state_est_train_epochs = 500
         cuncurrent_state_est_lr = 1e-3
         cuncurrent_state_est_ep_saving_interval = 1000
@@ -162,11 +161,17 @@ class Go2FlatEnvCfg(DirectRLEnvCfg):
     if(use_rma):
         rma_output_space = 12 # P gain
         rma_output_space += 12 # D gain 
+        rma_output_space += 12 # friction static
+        rma_output_space += 12 # friction dynamic
+        rma_output_space += 12 # armature
+        single_rma_observation_space = single_observation_space
+        rma_observation_space = observation_space
         observation_space += rma_output_space
         rma_batch_size = 32
         rma_train_epochs = 500
         rma_lr = 1e-3
         rma_ep_saving_interval = 1000
+        
 
     use_filter_actions = True
 
@@ -231,8 +236,13 @@ class Go2FlatEnvCfg(DirectRLEnvCfg):
         mesh_prim_paths=["/World/ground"],
     )
 
-    # an imu sensor in case we don't want any state estimator
-    imu = ImuCfg(prim_path="/World/envs/env_.*/Robot/base", debug_vis=True)
+    # an imu sensor in case we don't want any state estimator (for now we can't use sites from the xml)
+    imu = ImuCfg(
+        prim_path="/World/envs/env_.*/Robot/base", 
+        offset=ImuCfg.OffsetCfg(
+            pos=(-0.02557, 0, 0.04232)
+        ), 
+        debug_vis=False)
 
 
     # scene

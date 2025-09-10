@@ -491,13 +491,13 @@ class Go2EventCfg:
     )
 
 
-    # scale_all_joint_armature_model = EventTermCfg(
-    #     func=custom_events.randomize_joint_friction_model,
-    #     mode="startup",
-    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]),
-    #             "armature_distribution_params": (0.0, 1.0),
-    #             "operation": "scale"},
-    # )
+    scale_all_joint_armature_model = EventTermCfg(
+        func=custom_events.randomize_joint_friction_model,
+        mode="startup",
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"]),
+                "armature_distribution_params": (0.0, 1.0),
+                "operation": "scale"},
+    )
 
 
 
@@ -747,19 +747,20 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
         single_observation_space = observation_space # Placeholder. Later we may add map, but only from the latest obs
         observation_space *= history_length
 
+    use_imu = False
+
     use_cuncurrent_state_est = True
     if(use_cuncurrent_state_est):
         cuncurrent_state_est_output_space = 3 #lin_vel_b
-        cuncurrent_state_est_output_space += 3 #ang_vel_b
         single_cuncurrent_state_est_observation_space = single_observation_space
         cuncurrent_state_est_observation_space = observation_space
-        cuncurrent_state_est_batch_size = 32
+        cuncurrent_state_est_batch_size = 8
         cuncurrent_state_est_train_epochs = 500
         cuncurrent_state_est_lr = 1e-3
         cuncurrent_state_est_ep_saving_interval = 1000
 
     obs_scale_joint_pos = 1.0
-    obs_scale_joint_vel = 0.0
+    obs_scale_joint_vel = 0.05
     obs_scale_lin_vel = 2.0
     obs_scale_ang_vel = 0.25
     add_noise = True
@@ -834,7 +835,12 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     )
 
     # an imu sensor in case we don't want any state estimator
-    imu = ImuCfg(prim_path="/World/envs/env_.*/Robot/base", debug_vis=True)
+    imu = ImuCfg(
+        prim_path="/World/envs/env_.*/Robot/base",
+        offset=ImuCfg.OffsetCfg(
+            pos=(-0.02557, 0, 0.04232)
+        ),
+        debug_vis=False)
 
     command_curriculum = USE_VEL_CMD
     command_cl_init = 0.6
@@ -848,14 +854,14 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
 
     commands: MyCommandsCfg = MyCommandsCfg(
         ranges={
-            # "lin_vel_x": [-0.3, 0.3],
-            # "lin_vel_y": [-0.0, 0.0],
-            # "ang_vel_z": [-0.3, 0.3],
-            "lin_vel_x": [-0.0, 0.0],
+            "lin_vel_x": [-0.3, 0.3],
             "lin_vel_y": [-0.0, 0.0],
-            "ang_vel_z": [-0.0, 0.0],
-            # "heading": [-0.5 * np.pi, 0.5 * np.pi],
-            "heading": [0.0, 0.0],
+            "ang_vel_z": [-0.3, 0.3],
+            # "lin_vel_x": [-0.0, 0.0],
+            # "lin_vel_y": [-0.0, 0.0],
+            # "ang_vel_z": [-0.0, 0.0],
+            "heading": [-0.5 * np.pi, 0.5 * np.pi],
+            # "heading": [0.0, 0.0],
         }
     )
 
@@ -871,7 +877,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     reward_soft_dof_vel_limit = 1.
     reward_max_contact_force = 100.
     control_action_scale = 0.5 # TODO in isaacgym also used for other stuff, here only used in reward
-    reward_upright_vec = [0.0, 0.0, 1.0]
+    reward_upright_vec = [0.1, 0.0, 1.0]
 
     # Stand dance specific
     reward_tracking_liftup_sigma = 0.03
@@ -899,15 +905,15 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
             "tracking_lin_vel": 0.8,
             "tracking_ang_vel": 0.5,
             "rear_air": -0.5,
-            "action_rate": -0.03,
+            "action_rate": -0.07,
             "action_q_diff": action_q_diff_wt,
             "stand_air": -50 * 0,
             "dof_vel": -1e-4,
-            "dof_acc": -2.5e-7,
+            "dof_acc": -7.5e-7,
             "dof_pos_limits": -10,
-            "upright": 1.2e2,
+            "upright": 2.2e2,
             "lift_up_linear": 0.8e2,
-            "time_upright": 500, # new
+            "time_upright": 700, # new
             "foot_twist": -0,
             "foot_shift": -50,
             # "termination": -50.0,
@@ -920,7 +926,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
             "stumble": -0.0,
             # "front_feet_air_time": 500,
         }
-    ) #TODO make terminations less strict with curriculum?
+    )
 
     # events
     events: Go2EventCfg = Go2EventCfg()

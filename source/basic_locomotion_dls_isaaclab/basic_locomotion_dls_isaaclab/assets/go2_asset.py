@@ -4,9 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import isaaclab.sim as sim_utils
-from basic_locomotion_dls_isaaclab.actuators import IdentifiedActuatorCfg
+from basic_locomotion_dls_isaaclab.actuators import IdentifiedActuatorElectricCfg
 from isaaclab.assets.articulation import ArticulationCfg
-from isaaclab.actuators import DCMotorCfg
 
 from basic_locomotion_dls_isaaclab.assets import ISAAC_ASSET_DIR
 
@@ -14,11 +13,26 @@ from basic_locomotion_dls_isaaclab.assets import ISAAC_ASSET_DIR
 # Aliengo robot configuration from mujoco
 stiffness_mujoco = 25.0
 damping_mujoco = 2.0
-friction_static_mujoco = 0.2
-friction_dynamic_mujoco = 0.6
+
 armature_mujoco = 0.01
 
-GO2_HIP_ACTUATOR_CFG = IdentifiedActuatorCfg(
+friction_static_mujoco = 0.2 * 0.0
+friction_dynamic_mujoco = 0.6 * 0.0
+activation_vel = 0.1# * 0.0
+
+static_friction_hip = 0.5
+dynamic_friction_hip = 0.3
+viscous_friction_hip = 0.3
+
+static_friction_thigh = 0.5
+dynamic_friction_thigh = 0.3
+viscous_friction_thigh = 0.3
+
+static_friction_calf = 0.5
+dynamic_friction_calf = 0.3
+viscous_friction_calf = 0.3
+
+GO2_HIP_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     joint_names_expr=[".*_hip_joint"],
     effort_limit=23.7,
     velocity_limit=30.1,
@@ -27,11 +41,15 @@ GO2_HIP_ACTUATOR_CFG = IdentifiedActuatorCfg(
     damping=damping_mujoco,
     armature=armature_mujoco,
     friction_static=friction_static_mujoco,
-    activation_vel=0.1,
+    activation_vel=activation_vel,
     friction_dynamic=friction_dynamic_mujoco,
+
+    friction = static_friction_hip,
+    dynamic_friction = dynamic_friction_hip,
+    viscous_friction = viscous_friction_hip,
 )
 
-GO2_THIGH_ACTUATOR_CFG = IdentifiedActuatorCfg(
+GO2_THIGH_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     joint_names_expr=[".*_thigh_joint"],
     effort_limit=23.7,
     velocity_limit=30.1,
@@ -40,11 +58,15 @@ GO2_THIGH_ACTUATOR_CFG = IdentifiedActuatorCfg(
     damping=damping_mujoco,
     armature=armature_mujoco,
     friction_static=friction_static_mujoco,
-    activation_vel=0.1,
+    activation_vel=activation_vel,
     friction_dynamic=friction_dynamic_mujoco,
+
+    friction = static_friction_thigh,
+    dynamic_friction = dynamic_friction_thigh,
+    viscous_friction = viscous_friction_thigh,
 )
 
-GO2_CALF_ACTUATOR_CFG = IdentifiedActuatorCfg(
+GO2_CALF_ACTUATOR_CFG = IdentifiedActuatorElectricCfg(
     joint_names_expr=[".*_calf_joint"],
     effort_limit=45.43,
     velocity_limit=15.7,
@@ -53,8 +75,12 @@ GO2_CALF_ACTUATOR_CFG = IdentifiedActuatorCfg(
     damping=damping_mujoco,
     armature=armature_mujoco,
     friction_static=friction_static_mujoco,
-    activation_vel=0.1,
+    activation_vel=activation_vel,
     friction_dynamic=friction_dynamic_mujoco,
+
+    friction = static_friction_calf,
+    dynamic_friction = dynamic_friction_calf,
+    viscous_friction = viscous_friction_calf,
 )
 
 

@@ -175,7 +175,6 @@ class AliengoFlatEnvCfg(DirectRLEnvCfg):
         rma_ep_saving_interval = 1000
         
 
-
     use_filter_actions = True
 
     

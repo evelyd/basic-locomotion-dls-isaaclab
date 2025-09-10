@@ -58,6 +58,8 @@ def randomize_joint_friction_model(
     asset_cfg: SceneEntityCfg,
     friction_distribution_params: tuple[float, float] | None = None,
     armature_distribution_params: tuple[float, float] | None = None,
+    first_order_delay_filter_distribution_params: tuple[float, float] | None = None,
+    second_order_delay_filter_distribution_params: tuple[float, float] | None = None,
     operation: Literal["add", "scale", "abs"] = "abs",
     distribution: Literal["uniform", "log_uniform", "gaussian"] = "uniform",
 ):
@@ -105,6 +107,54 @@ def randomize_joint_friction_model(
                 )[env_ids][:, actuator_joint_ids]
                 actuator.armature[env_ids[:, None], actuator_joint_ids] = armature
 
+
+def randomize_joint_delay_model(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor | None,
+    asset_cfg: SceneEntityCfg,
+    friction_distribution_params: tuple[float, float] | None = None,
+    armature_distribution_params: tuple[float, float] | None = None,
+    first_order_delay_filter_distribution_params: tuple[float, float] | None = None,
+    second_order_delay_filter_distribution_params: tuple[float, float] | None = None,
+    operation: Literal["add", "scale", "abs"] = "abs",
+    distribution: Literal["uniform", "log_uniform", "gaussian"] = "uniform",
+):
+
+    """
+    Randomize the delay used in joint hydraulic model. 
+    """
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    # resolve environment ids
+    if env_ids is None:
+        env_ids = torch.arange(env.scene.num_envs, device=asset.device)
+
+    # resolve joint indices
+    if asset_cfg.joint_ids == slice(None):
+        joint_ids = slice(None)  # for optimization purposes
+    else:
+        joint_ids = torch.tensor(asset_cfg.joint_ids, dtype=torch.int, device=asset.device)
+
+    if first_order_delay_filter_distribution_params is not None:
+        for actuator in asset.actuators.values():
+            actuator_joint_ids = [joint_id in joint_ids for joint_id in actuator.joint_indices]
+            if sum(actuator_joint_ids) > 0:
+                first_order_delay_filter = actuator.first_order_delay_filter.to(asset.device).clone()
+                first_order_delay_filter = _randomize_prop_by_op(
+                    first_order_delay_filter, first_order_delay_filter_distribution_params, env_ids, torch.arange(first_order_delay_filter.shape[1]), operation=operation, distribution=distribution
+                )[env_ids][:, actuator_joint_ids]
+                actuator.first_order_delay_filter[env_ids[:, None], actuator_joint_ids] = first_order_delay_filter
+
+    if second_order_delay_filter_distribution_params is not None:
+        for actuator in asset.actuators.values():
+            actuator_joint_ids = [joint_id in joint_ids for joint_id in actuator.joint_indices]
+            if sum(actuator_joint_ids) > 0:
+                second_order_delay_filter = actuator.second_order_delay_filter.to(asset.device).clone()
+                second_order_delay_filter = _randomize_prop_by_op(
+                    second_order_delay_filter, second_order_delay_filter_distribution_params, env_ids, torch.arange(second_order_delay_filter.shape[1]), operation=operation, distribution=distribution
+                )[env_ids][:, actuator_joint_ids]
+                actuator.second_order_delay_filter[env_ids[:, None], actuator_joint_ids] = second_order_delay_filter
 
 
 def zero_command_velocity(

@@ -20,8 +20,8 @@ if(robot == "aliengo"):
     Kd_stand_up_and_down = 2.
 
 elif(robot == "go2"):
-    Kp_walking = 20.
-    Kd_walking = 1.5
+    Kp_walking = 25.
+    Kd_walking = 2.
 
     Kp_stand_up_and_down = 25.
     Kd_stand_up_and_down = 2.
@@ -64,5 +64,6 @@ observation_space = 53 #48  # Number of observations in the RL policy
 use_imu = False
 use_rma = False
 use_cuncurrent_state_est = True #False
-
 default_gait_freq = 2.5  # Hz, frequency of the gait
+#TODO needs to be updated per policy
+cuncurrent_state_est_network_path = dir_path + "/../tested_policies/" + robot + "/2025-09-07_19-13-16_go2_cuncurrent_se" + "/exported/cuncurrent_state_estimator.pth"

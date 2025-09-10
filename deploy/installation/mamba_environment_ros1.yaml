@@ -9,6 +9,7 @@ dependencies:
 - numpy
 - cuda-nvcc 
 - ros-noetic-desktop
+- ros-noetic-plotjuggler-ros
 - compilers 
 - cmake 
 - pkg-config 

@@ -28,5 +28,5 @@ float64[4] swing_period
 float64[4] normal_force_max
 float64[4] normal_force_min
 
-#float64[12] kp
-#float64[12] kd
+float64[12] kp
+float64[12] kd

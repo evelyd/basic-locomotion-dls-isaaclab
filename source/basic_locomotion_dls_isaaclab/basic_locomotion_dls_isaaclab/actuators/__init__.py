@@ -23,6 +23,8 @@ and called by the :class:`isaaclab.assets.Articulation` class.
 """
 
 from .actuator_cfg import (
-    IdentifiedActuatorCfg,
+    IdentifiedActuatorElectricCfg,
+    IdentifiedActuatorHydraulicCfg,
 )
-from .actuator_pd import IdentifiedActuator
+from .actuator_electric import IdentifiedActuatorElectric
+from .actuator_hydraulic import IdentifiedActuatorHydraulic
