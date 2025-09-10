@@ -215,9 +215,9 @@ def fill_replay_buffer(algorithm_instance, env_instance, obs_normalizer, critic_
 
     print(f"Initializing replay buffers by performing {num_initial_rollouts} full rollouts...")
 
-    # Set algorithm's actor_critic to evaluation mode during initialization
-    if hasattr(algorithm_instance.actor_critic, 'eval'):
-        algorithm_instance.actor_critic.eval()
+    # Set algorithm's policy to evaluation mode during initialization
+    if hasattr(algorithm_instance.policy, 'eval'):
+        algorithm_instance.policy.eval()
 
     # Reset environment to get initial observations for the very first rollout
     obs, extras = env_instance.get_observations()
@@ -264,8 +264,8 @@ def fill_replay_buffer(algorithm_instance, env_instance, obs_normalizer, critic_
     print("Replay buffer initialization complete.")
 
     # Switch back to train mode
-    if hasattr(algorithm_instance.actor_critic, 'train'):
-        algorithm_instance.actor_critic.train()
+    if hasattr(algorithm_instance.policy, 'train'):
+        algorithm_instance.policy.train()
 
 
 def split_and_pad_trajectories(tensor, dones):
@@ -334,6 +334,7 @@ def initialize_dae_model(cfg, G, task: str, dt: int, device: torch.device, is_id
     rep_euler_xyz = G.representations['euler_xyz']
     rep_euler_z = group_rep_from_gens(G, rep_H={h: rep_euler_xyz(h)[2, 2].reshape((1, 1)) for h in G.elements if h != G.identity})
     rep_euler_z.name = "euler_z"
+    rep_kin_three_two = get_kinematic_three_rep_two(G)
     rep_kin_three = get_kinematic_three_rep(G)
 
     # Create dict to define which obs match which representations
@@ -341,12 +342,14 @@ def initialize_dae_model(cfg, G, task: str, dt: int, device: torch.device, is_id
         'base_lin_vel': rep_Rd,
         'base_ang_vel': rep_euler_xyz,
         'projected_gravity': rep_Rd,
+        'forward_vec': rep_Rd,
         'velocity_commands_xy': rep_xy,
         'velocity_commands_z': rep_euler_z,
         'joint_pos': rep_TqQ_js,
         'joint_vel': rep_TqQ_js,
         'prev_action': rep_TqQ_js,
         'clock_data': rep_kin_three,
+        'clock_input': rep_kin_three_two,
         'action': rep_TqQ_js,
     }
 
@@ -452,6 +455,18 @@ def get_kinematic_three_rep(G: Group):
     #  [RF, LF, RH, LH]
     rep_kin_three = {G.identity: np.eye(4, dtype=int)}
     gens = [permutation_matrix([1, 0, 3, 2]), permutation_matrix([2, 3, 0, 1]), permutation_matrix([0, 1, 2, 3])]
+    for h, rep_h in zip(G.generators, gens):
+        rep_kin_three[h] = rep_h
+
+    rep_kin_three = group_rep_from_gens(G, rep_kin_three)
+    rep_kin_three.name = "kin_three"
+    return rep_kin_three
+
+def get_kinematic_three_rep_two(G: Group):
+    #  [0   1    2   3]
+    #  [RF, LF, RH, LH]
+    rep_kin_three = {G.identity: np.eye(2, dtype=int)}
+    gens = [permutation_matrix([1, 0])]
     for h, rep_h in zip(G.generators, gens):
         rep_kin_three[h] = rep_h
 

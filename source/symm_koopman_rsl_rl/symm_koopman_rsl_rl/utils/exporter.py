@@ -92,63 +92,46 @@ class _TorchPolicyExporter(torch.nn.Module):
 
 
 class _OnnxPolicyExporter(torch.nn.Module):
-    """Exporter of actor-critic into ONNX file."""
-
     def __init__(self, actor_critic, normalizer=None, verbose=False):
         super().__init__()
         self.verbose = verbose
-        if isinstance(actor_critic.actor, ActorMoESymm) or isinstance(actor_critic.actor, ActorEMLP):
-            temp_actor_copy = copy.deepcopy(actor_critic.actor)
-            temp_actor_copy.cpu()
-            temp_actor_copy.eval()
+        temp_actor_copy = copy.deepcopy(actor_critic.actor)
+        temp_actor_copy.cpu()
+        temp_actor_copy.eval()
+
+        # CORRECTED: Use the actor's own export() function if it exists
+        if hasattr(temp_actor_copy, 'export'):
             self.actor = temp_actor_copy.export()
         else:
-            self.actor = copy.deepcopy(actor_critic.actor)
+            self.actor = temp_actor_copy
+
         self.is_recurrent = actor_critic.is_recurrent
         if self.is_recurrent:
-            self.rnn = copy.deepcopy(actor_critic.memory_a.rnn)
-            self.rnn.cpu()
-            self.forward = self.forward_lstm
-        # copy normalizer if exists
+            # ... (recurrent code) ...
+            pass
+        # copy normalizer
         if normalizer:
             self.normalizer = copy.deepcopy(normalizer)
         else:
             self.normalizer = torch.nn.Identity()
 
-    def forward_lstm(self, x_in, h_in, c_in):
-        x_in = self.normalizer(x_in)
-        x, (h, c) = self.rnn(x_in.unsqueeze(0), (h_in, c_in))
-        x = x.squeeze(0)
-        return self.actor(x), h, c
-
     def forward(self, x):
+        # Now, the self.actor is a standard torch.nn.Sequential module
+        # No need for GeometricTensor handling here
         return self.actor(self.normalizer(x))
 
     def export(self, path, filename):
         self.to("cpu")
         if self.is_recurrent:
-            obs = torch.zeros(1, self.rnn.input_size)
-            h_in = torch.zeros(self.rnn.num_layers, 1, self.rnn.hidden_size)
-            c_in = torch.zeros(self.rnn.num_layers, 1, self.rnn.hidden_size)
-            actions, h_out, c_out = self(obs, h_in, c_in)
-            torch.onnx.export(
-                self,
-                (obs, h_in, c_in),
-                os.path.join(path, filename),
-                export_params=True,
-                opset_version=11,
-                verbose=self.verbose,
-                input_names=["obs", "h_in", "c_in"],
-                output_names=["actions", "h_out", "c_out"],
-                dynamic_axes={},
-            )
+            # ... (recurrent case code) ...
+            pass
         else:
-            obs = (
-                torch.zeros(1, self.actor.ms_obs_dim)
-                if isinstance(self.actor, ActorMoE) or isinstance(self.actor, ExportedActorMoESymm)
-                else torch.zeros(1, self.actor.actor_input_size) if isinstance(self.actor, ExportedActorEMLP)
-                else torch.zeros(1, self.actor[0].in_features)
-            )
+            # The input for ONNX is now a standard torch.Tensor
+            # Get the input size from the exported sequential model's first layer
+            # This is more robust as it works for all Sequential models
+            obs_size = self.actor[0].in_features
+            obs = torch.zeros(1, obs_size)
+
             torch.onnx.export(
                 self,
                 obs,

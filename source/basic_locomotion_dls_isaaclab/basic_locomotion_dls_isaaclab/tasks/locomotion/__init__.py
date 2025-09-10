@@ -56,6 +56,36 @@ gym.register(
 )
 
 gym.register(
+    id="Stand-Dance-Go2-EMLP-Flat-Direct",
+    entry_point=AliengoStandDanceEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": Go2StandDanceDirectEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:StandDanceEMLPCfgPPO",
+    },
+)
+
+gym.register(
+    id="Stand-Dance-Go2-CDAE-Online-Flat-Direct",
+    entry_point=AliengoStandDanceEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": Go2StandDanceDirectEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:StandDanceCDAEOnlineCfgPPO",
+    },
+)
+
+gym.register(
+    id="Stand-Dance-Go2-EMLP-ECDAE-Online-Flat-Direct",
+    entry_point=AliengoStandDanceEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": Go2StandDanceDirectEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:StandDanceEMLPECDAEOnlineCfgPPO",
+    },
+)
+
+gym.register(
     id="Locomotion-Aliengo-Flat",
     entry_point=LocomotionEnv,
     disable_env_checker=True,

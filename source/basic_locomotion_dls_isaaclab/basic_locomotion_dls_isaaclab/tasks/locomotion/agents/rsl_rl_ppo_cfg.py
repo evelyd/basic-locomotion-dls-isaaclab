@@ -260,11 +260,11 @@ class FlatPPOCDAEOnlineRunnerCfg(FlatPPORunnerCfg):
         robot={'name': 'aliengo',
                 'lr': 1e-3,
                 'max_epochs': 200,
-                'obs_state_ratio': 2,
+                'obs_state_ratio': 3,
                 'state_obs': ['base_lin_vel', 'base_ang_vel', 'projected_gravity', 'velocity_commands_xy', 'velocity_commands_z', 'joint_pos', 'joint_vel', 'prev_action', 'clock_data'],
                 'action_obs': ['action'],
-                'state_dim': 3 + 3 + 14 + 14 + 14 + 2 + 1 + 3 * (57 - 14),
-                'action_dim': 14 + (57 - 14),
+                'state_dim': 48 + 4,
+                'action_dim': 12,
                 'pred_horizon': 5,
                 'frames_per_state': 1},
     )
@@ -306,11 +306,11 @@ class FlatPPOEMLPECDAEOnlineRunnerCfg(FlatPPOCDAEOnlineRunnerCfg):
         robot={'name': 'aliengo',
                 'lr': 1e-3,
                 'max_epochs': 200,
-                'obs_state_ratio': 2,
-                'state_obs': ['base_ang_vel', 'projected_gravity', 'joint_pos', 'joint_vel', 'prev_action', 'velocity_commands_xy', 'velocity_commands_z'],
+                'obs_state_ratio': 3,
+                'state_obs': ['base_lin_vel', 'base_ang_vel', 'projected_gravity', 'velocity_commands_xy', 'velocity_commands_z', 'joint_pos', 'joint_vel', 'prev_action', 'clock_data'],
                 'action_obs': ['action'],
-                'state_dim': 3 + 3 + 14 + 14 + 14 + 2 + 1 + 3 * (57 - 14),
-                'action_dim': 14 + (57 - 14),
+                'state_dim': 48 + 4,
+                'action_dim': 12,
                 'pred_horizon': 5,
                 'frames_per_state': 1},
     )
@@ -353,6 +353,7 @@ class LeggedRobotCfgPPO(RslRlOnPolicyRunnerCfg):
         max_grad_norm=1.0,
     )
 
+@configclass
 class CommonCfgPPO(LeggedRobotCfgPPO):
     """Common configuration for the legged robot tasks."""
     use_wandb = True
@@ -373,8 +374,138 @@ class CommonCfgPPO(LeggedRobotCfgPPO):
         max_grad_norm=1.0,
     )
 
+@configclass
 class StandDanceCfgPPO(CommonCfgPPO):
     """Configuration for the stand dance task using PPO."""
     experiment_name = "stand_dance_cyber_aliengo"
     max_iterations = 30000
     save_interval = 300
+
+@configclass
+class StandDanceEMLPCfgPPO(StandDanceCfgPPO):
+    """Configuration for the stand dance task using PPO."""
+    experiment_name = "stand_dance_go2_emlp"
+    max_iterations = 30000
+    save_interval = 300
+    robot_name = 'go2'
+
+    policy = RslRlPpoActorCriticCfg(
+        class_name="ActorCriticSymm", #ActorCritic, ActorCriticRecurrent, ActorCriticSymm, ActorCriticMoE
+        init_noise_std=1.0,
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
+        activation="elu",
+    )
+
+@configclass
+class StandDanceCDAEOnlineCfgPPO(StandDanceCfgPPO):
+    """Configuration for the stand dance task using PPO."""
+    experiment_name = "stand_dance_go2_cdae_online"
+    max_iterations = 30000
+    save_interval = 300
+
+    algorithm = RslRlPpoAlgorithmCfg(
+        class_name="PPODAEOnline", #PPO, PPOSymmDataAugmented #AMP_PPO
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-4,
+        schedule="fixed",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.005,
+        max_grad_norm=1.0,
+    )
+
+    koopman = KoopmanCfg(
+        model={'name': 'cdae',
+               'equivariant': False,
+               'activation': 'ELU',
+               'num_layers': 5,
+               'num_hidden_units': 128,
+               'batch_norm': False,
+               'obs_pred_w': 1.0,
+               'orth_w': 0.0,
+               'corr_w': 0.0,
+               'bias': True,
+               'constant_function': True,
+               'num_mini_batches': 8,
+               'mini_batch_size': 256,
+               'beta_initial': 0.4,
+               'beta_annealing_steps': 4000},
+        robot={'name': 'go2',
+                'lr': 1e-3,
+                'max_epochs': 200,
+                'obs_state_ratio': 3, #TODO change the obs, state dim, etc.
+                'state_obs': ['projected_gravity', 'forward_vec', 'velocity_commands_xy', 'velocity_commands_z', 'joint_pos', 'joint_vel', 'prev_action', 'clock_input'],
+                'action_obs': ['action'],
+                'state_dim': 47,
+                'action_dim': 12,
+                'pred_horizon': 5,
+                'frames_per_state': 1},
+    )
+
+@configclass
+class StandDanceEMLPECDAEOnlineCfgPPO(StandDanceCfgPPO):
+    """Configuration for the stand dance task using PPO."""
+    experiment_name = "stand_dance_go2_emlp_ecdae_online"
+    max_iterations = 30000
+    save_interval = 300
+
+    policy = RslRlPpoActorCriticCfg(
+        class_name="ActorCriticSymm", #ActorCritic, ActorCriticRecurrent, ActorCriticSymm, ActorCriticMoE
+        init_noise_std=1.0,
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
+        activation="elu",
+    )
+
+    algorithm = RslRlPpoAlgorithmCfg(
+        class_name="PPODAEOnline", #PPO, PPOSymmDataAugmented #AMP_PPO
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-4,
+        schedule="fixed",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.005,
+        max_grad_norm=1.0,
+    )
+
+    koopman = KoopmanCfg(
+        model={'name': 'cdae',
+               'equivariant': False,
+               'activation': 'ELU',
+               'num_layers': 5,
+               'num_hidden_units': 128,
+               'batch_norm': False,
+               'obs_pred_w': 1.0,
+               'orth_w': 0.0,
+               'corr_w': 0.0,
+               'bias': True,
+               'constant_function': True,
+               'num_mini_batches': 8,
+               'mini_batch_size': 256,
+               'beta_initial': 0.4,
+               'beta_annealing_steps': 4000,
+               'equivariant': True,
+               'group_avg_trick': True,
+               'state_dependent_obs_dyn': False},
+        robot={'name': 'go2',
+                'lr': 1e-3,
+                'max_epochs': 200,
+                'obs_state_ratio': 3,
+                'state_obs': ['projected_gravity', 'forward_vec', 'velocity_commands_xy', 'velocity_commands_z', 'joint_pos', 'joint_vel', 'prev_action', 'clock_input'],
+                'action_obs': ['action'],
+                'state_dim': 47,
+                'action_dim': 12,
+                'pred_horizon': 5,
+                'frames_per_state': 1},
+    )

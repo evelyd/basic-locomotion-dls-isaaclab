@@ -84,22 +84,12 @@ class ActorCriticSymm(nn.Module):
         # Define the input and output FieldTypes using the representations of each geometric object.
         # Representation of x := [q, v] ∈ Q_js x TqQ_js      =>    ρ_X_js(g) := ρ_Q_js(g) ⊕ ρ_TqQ_js(g)  | g ∈ G
         # for push door task
-        if "stand-dance" in task.lower():
+        if "stand_dance" in task.lower():
             base_transition = ([rep_Rd, rep_Rd, rep_xy, rep_euler_z, rep_TqQJ, rep_TqQJ, rep_TqQJ, rep_kin_three_two]) * 3
-            rep_extra_obs = [rep_Rd, rep_Rd_pseudo, trivial_rep, trivial_rep, rep_friction, rep_Rd, trivial_rep, trivial_rep, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two]
+            rep_extra_obs = [rep_Rd, rep_Rd_pseudo, trivial_rep, trivial_rep, rep_friction, rep_Rd, trivial_rep, trivial_rep, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two] #TODO are contact os reps correct? same approach as symmloco
             if is_dae:
                 latent_transition = [rep_Rd, rep_Rd, rep_xy, rep_euler_z, rep_TqQJ, rep_TqQJ, rep_TqQJ, rep_kin_three_two] * obs_state_ratio
         else: # for locomotion tasks
-            # for tensor in (
-            #         velocity_b,
-            #         angular_velocity_b,
-            #         projected_gravity_b,
-            #         self._commands,
-            #         self._robot.data.joint_pos - self._robot.data.default_joint_pos,
-            #         self._robot.data.joint_vel,
-            #         self._actions,
-            #         clock_data,
-            #     )
             base_transition = ([rep_Rd, rep_Rd_pseudo, rep_Rd, rep_xy, rep_euler_z, rep_TqQJ, rep_TqQJ, rep_TqQJ, rep_kin_three]) * 5
             rep_extra_obs = []
             if is_dae:
@@ -107,13 +97,12 @@ class ActorCriticSymm(nn.Module):
 
         in_field_type = FieldType(gspace, base_transition)
         # Representation of y := [l, k] ∈ R3 x R3            =>    ρ_Y_js(g) := ρ_O3(g) ⊕ ρ_O3pseudo(g)  | g ∈ G
-        out_field_type = FieldType(gspace, [rep_QJ])
+        out_field_type = FieldType(gspace, [rep_TqQJ])
 
         if is_dae:
             critic_in_field_type = FieldType(gspace, base_transition + rep_extra_obs + latent_transition)
         else:
             critic_in_field_type = FieldType(gspace, base_transition + rep_extra_obs)
-        print(f"critic in field type: {critic_in_field_type}")
 
         self.gspace = gspace
         self.in_field_type = in_field_type
@@ -237,6 +226,7 @@ class SimpleEMLP(EquivariantModule):
                  actor: bool = True,
                  activation: str = "ReLU"):
         super().__init__()
+        self.in_type = in_type
         self.out_type = out_type
         gspace = in_type.gspace
         group = gspace.fibergroup

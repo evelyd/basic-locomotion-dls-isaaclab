@@ -59,7 +59,10 @@ class OnPolicyRunner:
         obs, extras = self.env.get_observations()
         num_obs = obs.shape[1]
 
-        history_length = env.cfg['history_length'] if 'history_length' in env.cfg else 1
+        try:
+            history_length = env.cfg.history_length
+        except AttributeError:
+            history_length = 1
 
         # resolve type of privileged observations
         if self.training_type == "rl":
@@ -89,7 +92,13 @@ class OnPolicyRunner:
             self.model_path = self.cfg["model_path"]
 
         from morpho_symm.utils.robot_utils import load_symmetric_system
-        robot, G = load_symmetric_system(robot_name="ergocub")
+
+        if "online" in self.task.lower():
+            robot_name = self.koopman_cfg['robot']['name']
+            robot, G = load_symmetric_system(robot_name=robot_name)
+        elif "emlp" in self.task.lower():
+            robot_name = self.cfg['robot_name']
+            robot, G = load_symmetric_system(robot_name=robot_name)
 
         if "online" in self.task.lower():
             is_dae = True
@@ -113,7 +122,7 @@ class OnPolicyRunner:
             ).to(self.device)
         else:
             policy: ActorCritic | ActorCriticRecurrent | StudentTeacher | StudentTeacherRecurrent = policy_class(
-            num_obs, num_privileged_obs, self.env.num_actions, **self.policy_cfg
+            num_obs, num_critic_obs, self.env.num_actions, **self.policy_cfg
             ).to(self.device)
 
         # resolve dimension of rnd gated state
@@ -196,6 +205,8 @@ class OnPolicyRunner:
         self.tot_time = 0
         self.current_learning_iteration = 0
         self.git_status_repos = [rsl_rl.__file__]
+
+        # input(f"policy class {policy_class}, ppo class {self.alg.__class__.__name__}, num_critic_obs {num_critic_obs}, num_obs {num_obs}, num_privileged_obs {num_privileged_obs}, is_dae {is_dae}")
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):  # noqa: C901
         # initialize writer
@@ -494,6 +505,7 @@ class OnPolicyRunner:
             if self.log_dir is not None and not self.disable_logs:
                 # Log information
                 locs = locals()
+                locs.update(loss_dict)
                 if "online" in self.task:
                     locs["mean_dae_loss"] = mean_dae_loss
                     locs["mean_dae_obs_pred_loss"] = mean_dae_obs_pred_loss
