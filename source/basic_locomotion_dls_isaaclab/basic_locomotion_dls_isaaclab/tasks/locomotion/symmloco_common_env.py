@@ -29,7 +29,7 @@ from .go2_env_cfg import Go2FlatEnvCfg, Go2RoughVisionEnvCfg, Go2RoughBlindEnvCf
 from .hyqreal_env_cfg import HyQRealFlatEnvCfg, HyQRealRoughVisionEnvCfg, HyQRealRoughBlindEnvCfg
 from .b2_env_cfg import B2FlatEnvCfg, B2RoughVisionEnvCfg, B2RoughBlindEnvCfg
 
-
+from basic_locomotion_dls_isaaclab.tasks.supervised_learning_networks import SimpleNN
 
 class SymmlocoCommonEnv(DirectRLEnv):
     cfg: AliengoFlatEnvCfg | AliengoRoughBlindEnvCfg | AliengoRoughVisionEnvCfg | Go2FlatEnvCfg | Go2RoughVisionEnvCfg | Go2RoughBlindEnvCfg | HyQRealFlatEnvCfg | HyQRealRoughVisionEnvCfg | HyQRealRoughBlindEnvCfg
@@ -54,6 +54,12 @@ class SymmlocoCommonEnv(DirectRLEnv):
 
         # Observation history
         self._observation_history = torch.zeros(self.num_envs, cfg.history_length, cfg.single_observation_space, device=self.device)
+
+        # Learned State Estimator TODO if only using the proj gravity in the obs, this is not required, only thing that changes is to use the imu proj gravity rather than ground truth
+        if(cfg.use_cuncurrent_state_est == True):
+            self._cuncurrent_state_est_network = SimpleNN(cfg.cuncurrent_state_est_observation_space, cfg.cuncurrent_state_est_output_space)
+            self._cuncurrent_state_est_network.to(self.device)
+            self._observation_history_cuncurrent_state_est = torch.zeros(self.num_envs, cfg.history_length, cfg.single_cuncurrent_state_est_observation_space, device=self.device)
 
         # Logging
         self._episode_sums = {
@@ -218,12 +224,22 @@ class SymmlocoCommonEnv(DirectRLEnv):
         return observations
 
     def _compute_common_obs(self):
+
+        # Choosing the main source of observation
+        if(self.cfg.use_cuncurrent_state_est):
+            # If Cuncurrent SE/Learned State Estimator, we predict linear and angular vel from IMU
+            # velocity_b = self._get_cuncurrent_state_estimation(clock_data)
+            # angular_velocity_b = self._imu.data.ang_vel_b
+            projected_gravity_b = self._imu.data.projected_gravity_b
+        else:
+            projected_gravity_b = self._robot.data.projected_gravity_b
+
         obs = torch.cat(
             [
                 # values are scaled in noise_vec function
                 tensor
                 for tensor in (
-                    self._robot.data.projected_gravity_b,
+                    projected_gravity_b,
                     self._commands[:, :3] * self.cfg.command_scale,
                     (self._robot.data.joint_pos - self._robot.data.default_joint_pos),
                     self._robot.data.joint_vel,

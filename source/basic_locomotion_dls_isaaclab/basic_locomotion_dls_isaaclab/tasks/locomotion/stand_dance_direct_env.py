@@ -27,12 +27,25 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         self.abrupt_change_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
     def _compute_common_obs(self):
+
+        # Choosing the main source of observation
+        if(self.cfg.use_cuncurrent_state_est):
+            # If Cuncurrent SE/Learned State Estimator, we predict linear and angular vel from IMU
+            velocity_b = self._get_cuncurrent_state_estimation()
+            angular_velocity_b = self._imu.data.ang_vel_b
+            projected_gravity_b = self._imu.data.projected_gravity_b
+        else:
+            velocity_b = self._robot.data.root_lin_vel_b
+            angular_velocity_b = self._robot.data.root_ang_vel_b
+            projected_gravity_b = self._robot.data.projected_gravity_b
+
         obs = torch.cat(
             [
                 tensor
                 for tensor in (
-                    self._robot.data.projected_gravity_b,
-                    #TODO not using imu base info!!
+                    velocity_b * self.cfg.obs_scale_lin_vel,
+                    angular_velocity_b * self.cfg.obs_scale_ang_vel,
+                    projected_gravity_b,
                     math_utils.quat_apply_inverse(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B),
                     self._commands[:, :3] * self.command_scale,
                     (self._robot.data.joint_pos - self._robot.data.default_joint_pos) * self.cfg.obs_scale_joint_pos,
@@ -215,6 +228,58 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         heights = torch.gather(ray_hits_z_expanded, 2, closest_ray_indices.unsqueeze(2)).squeeze(2)
 
         return heights
+
+    def _get_cuncurrent_state_estimation(self):
+        # Using a supervised learning state estimation
+        obs_cuncurrent_state_est = torch.cat(
+            [
+                tensor
+                for tensor in (
+                    self._imu.data.lin_acc_b,
+                    self._imu.data.ang_vel_b,
+                    self._robot.data.projected_gravity_b,
+                    self._commands,
+                    self._robot.data.joint_pos - self._robot.data.default_joint_pos,
+                    self._robot.data.joint_vel,
+                    self._actions,
+                    self._clock_inputs[:, -2:],
+                )
+                if tensor is not None
+            ],
+            dim=-1,
+        )
+        #the bottom element is the newest observation!!
+        self._observation_history_cuncurrent_state_est = torch.cat((self._observation_history_cuncurrent_state_est[:,1:,:], obs_cuncurrent_state_est.unsqueeze(1)), dim=1)
+        obs_cuncurrent_state_est = torch.flatten(self._observation_history_cuncurrent_state_est, start_dim=1)
+
+        # Add noise to the observation - this is usually done in direct_rl.py in IsaacLab, but
+        # the obs of cuncurrent SE does not pass from there - its prediciton yes instead!
+        if self.cfg.observation_noise_model:
+            obs_cuncurrent_state_est = self._observation_noise_model(obs_cuncurrent_state_est)
+
+        # Saving data
+        output_cuncurrent_state_est = torch.cat((self._robot.data.root_lin_vel_b), dim=-1)
+        self._cuncurrent_state_est_network.dataset.add_sample(obs_cuncurrent_state_est, output_cuncurrent_state_est)
+
+        # Prediction
+        num_episode_from_start = self.common_step_counter / 24. #self.max_episode_length #HACK this should be taken from rsl rl
+        num_final_episode_from_start = 8000.
+        if num_episode_from_start > self.cfg.cuncurrent_state_est_ep_saving_interval:
+            prediction_cuncurrent_state_est = self._cuncurrent_state_est_network(obs_cuncurrent_state_est)
+            linear_velocity_b = prediction_cuncurrent_state_est[:, :3]
+        else:
+            linear_velocity_b = self._robot.data.root_lin_vel_b
+
+        # Train at some interval
+        if num_episode_from_start % self.cfg.cuncurrent_state_est_ep_saving_interval == 0 and num_episode_from_start > self.cfg.cuncurrent_state_est_ep_saving_interval - 1:  # Adjust the interval as needed
+            self._cuncurrent_state_est_network.train_network(batch_size=self.cfg.cuncurrent_state_est_batch_size,
+                                                            epochs=self.cfg.cuncurrent_state_est_train_epochs,
+                                                            learning_rate=self.cfg.cuncurrent_state_est_lr, device=self.device)
+        if num_episode_from_start == num_final_episode_from_start - 10:
+            # Save the network
+            self._cuncurrent_state_est_network.save_network("cuncurrent_state_estimator.pth", self.device)
+
+        return linear_velocity_b
 
     #------------ reward functions----------------
     def _reward_lift_up(self):
