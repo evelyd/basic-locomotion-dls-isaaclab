@@ -1,14 +1,15 @@
 import sys
-import os 
+import os
 dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path+"/../")
 sys.path.append(dir_path+"/../scripts/rsl_rl")
 
-robot = 'aliengo'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'mini_cheetah' 
+robot = 'go2'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'mini_cheetah'
 scene = 'flat'  # flat, random_boxes, random_pyramids, perlin
 
 #policy_path = "/home/iit.local/gturrisi/isaaclab_ws_home/basic-locomotion-dls-isaaclab/tested_policies/hyqreal/2025-07-23_09-19-46_8k_128_128_128_hyq/exported/policy.onnx"
-policy_path = dir_path + "/../tested_policies/" + robot + "/8k_128_128_128_aliengo_stop_and_go_correct_offset" + "/exported/policy.onnx"
+# policy_path = dir_path + "/../tested_policies/" + robot + "/8k_128_128_128_aliengo_stop_and_go_correct_offset" + "/exported/policy.onnx"
+policy_path = "/home/edelia-iit.local/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9750_2025-09-09_23-02-03_dof_acc_e6.onnx"
 
 # ----------------------------------------------------------------------------------------------------------------
 if(robot == "aliengo"):
@@ -48,9 +49,9 @@ use_clip_actions = True  # If True, clip the actions to avoid too high torques
 clip_actions = 3.0  # Clip the actions to avoid too high torques
 
 use_observation_history = True  # If True, use the history of the actions to compute the RL policy
-history_length = 5  # Length of the history of the actions to be used in the RL policy
+history_length = 3 #5  # Length of the history of the actions to be used in the RL policy
 
-use_clock_signal = True  # If True, use the clock signal in the RL policy
+use_clock_signal = False #True  # If True, use the clock signal in the RL policy
 
 use_vision = False  # If True, use the vision observations in the RL policy
 if(use_vision):
@@ -58,8 +59,10 @@ if(use_vision):
     size_x_heightmap = 0.6  # Size of the heightmap in meters
     size_y_heightmap = 0.6  # Size of the heightmap in meters
 
-observation_space = 48  # Number of observations in the RL policy
+observation_space = 53 #48  # Number of observations in the RL policy
 
 use_imu = False
 use_rma = False
-use_cuncurrent_state_est = False
+use_cuncurrent_state_est = True #False
+
+default_gait_freq = 2.5  # Hz, frequency of the gait

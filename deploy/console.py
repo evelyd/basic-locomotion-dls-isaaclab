@@ -19,7 +19,7 @@ class Console():
 
         # Autocomplete setup
         self.commands = [
-            "help", "ictp", "goUp", "goDown", "activate", "ictp", "setKp", "setKd"
+            "help", "ictp", "goUp", "goDown", "activate", "ictp", "setKp", "setKd", "sit"
         ]
         readline.set_completer(self.complete)
         readline.parse_and_bind("tab: complete")
@@ -45,7 +45,7 @@ class Console():
                         print("The robot is already up")
                         continue
 
-                                        
+
                     start_time = time.time()
                     time_motion = 5.
 
@@ -59,7 +59,7 @@ class Console():
                     reference_joint_positions = LegsAttr(*[np.zeros((1, int(self.controller_node.env.mjModel.nu/4))) for _ in range(4)])
                     keyframe_id = mujoco.mj_name2id(self.controller_node.env.mjModel, mujoco.mjtObj.mjOBJ_KEY, "home")
                     standUp_qpos = self.controller_node.env.mjModel.key_qpos[keyframe_id]
-                    
+
                     reference_joint_positions.FL = standUp_qpos[7:10]
                     reference_joint_positions.FR = standUp_qpos[10:13]
                     reference_joint_positions.RL = standUp_qpos[13:16]
@@ -100,7 +100,7 @@ class Console():
                     initial_joint_positions.FR = temp[3:6]
                     initial_joint_positions.RL = temp[6:9]
                     initial_joint_positions.RR = temp[9:12]
-                    
+
                     keyframe_id = mujoco.mj_name2id(self.controller_node.env.mjModel, mujoco.mjtObj.mjOBJ_KEY, "down")
                     goDown_qpos = self.controller_node.env.mjModel.key_qpos[keyframe_id]
                     reference_joint_positions = LegsAttr(*[np.zeros((1, int(self.controller_node.env.mjModel.nu/4))) for _ in range(4)])
@@ -116,7 +116,7 @@ class Console():
                             (1 - alpha) * initial + alpha * reference
                             for initial, reference in zip(initial_joint_positions, reference_joint_positions)
                         ]
-            
+
                         self.controller_node.stand_up_and_down_actions.FL = interpolated_positions[0]
                         self.controller_node.stand_up_and_down_actions.FR = interpolated_positions[1]
                         self.controller_node.stand_up_and_down_actions.RL = interpolated_positions[2]
@@ -124,7 +124,7 @@ class Console():
 
                         time.sleep(0.01)
 
-                    
+
                 elif(input_string == "activate"):
                     self.isRLActivated = not self.isRLActivated
 
@@ -138,12 +138,12 @@ class Console():
                     temp = input("Enter Kp: ")
                     if(temp != ""):
                         self.controller_node.Kp_stand_up_and_down= float(temp)
-                    
+
                     print("Kp walking: ", self.controller_node.locomotion_policy.Kp_walking)
                     temp = input("Enter Kp: ")
                     if(temp != ""):
                         self.controller_node.locomotion_policy.Kp_walking = float(temp)
-                
+
 
                 elif(input_string == "setKd"):
                     print("Kd stand_up_and_down: ", self.controller_node.locomotion_policy.Kd_stand_up_and_down)
@@ -155,7 +155,45 @@ class Console():
                     temp = input("Enter Kd: ")
                     if(temp != ""):
                         self.controller_node.locomotion_policy.Kd = float(temp)
-                
+
+                elif(input_string == "sit"):
+                    print("Moving to sit position")
+
+                    # Capture current joint positions
+                    start_time = time.time()
+                    time_motion = 5.
+                    temp = copy.deepcopy(self.controller_node.joint_positions)
+                    initial_joint_positions = LegsAttr(*[np.zeros((1, int(self.controller_node.env.mjModel.nu/4))) for _ in range(4)])
+                    initial_joint_positions.FL = temp[0:3]
+                    initial_joint_positions.FR = temp[3:6]
+                    initial_joint_positions.RL = temp[6:9]
+                    initial_joint_positions.RR = temp[9:12]
+
+                    # Define the target sitting joint configuration
+                    reference_joint_positions = LegsAttr(*[np.zeros((1, int(self.controller_node.env.mjModel.nu/4))) for _ in range(4)])
+                    reference_joint_positions.FL = np.array([0.0, 1.3, -2.5])
+                    reference_joint_positions.FR = np.array([0.0, 1.3, -2.5])
+                    reference_joint_positions.RL = np.array([0.0, 1.3, -2.5])
+                    reference_joint_positions.RR = np.array([0.0, 1.3, -2.5])
+
+                    # Interpolate from current to sitting position over time
+                    while(time.time() - start_time < time_motion):
+                        time_diff = time.time() - start_time
+                        alpha = time_diff / time_motion
+                        interpolated_positions = [
+                            (1 - alpha) * initial + alpha * reference
+                            for initial, reference in zip(initial_joint_positions, reference_joint_positions)
+                        ]
+
+                        self.controller_node.stand_up_and_down_actions.FL = interpolated_positions[0]
+                        self.controller_node.stand_up_and_down_actions.FR = interpolated_positions[1]
+                        self.controller_node.stand_up_and_down_actions.RL = interpolated_positions[2]
+                        self.controller_node.stand_up_and_down_actions.RR = interpolated_positions[3]
+
+                        time.sleep(0.01)
+
+                    print("Robot is now in a sitting position.")
+
                 elif(input_string == "ictp"):
                     print("Interactive Keyboard Control")
                     print("w: Move Forward")
@@ -192,7 +230,7 @@ class Console():
                         elif(command == "0"):
                             self.controller_node.env._ref_base_lin_vel_H[0] = 0
                             self.controller_node.env._ref_base_lin_vel_H[1] = 0
-                            self.controller_node.env._ref_base_ang_yaw_dot = 0 
+                            self.controller_node.env._ref_base_ang_yaw_dot = 0
                             print("0")
                         elif(command == "1"):
                             self.pitch_delta -= 0.1
@@ -206,10 +244,10 @@ class Console():
                         else:
                             self.controller_node.env._ref_base_lin_vel_H[0] = 0
                             self.controller_node.env._ref_base_lin_vel_H[1] = 0
-                            self.controller_node.env._ref_base_ang_yaw_dot = 0 
+                            self.controller_node.env._ref_base_ang_yaw_dot = 0
                             break
-            
-            
+
+
             except Exception as e:
                 print("Error: ", e)
                 print("Invalid Command")

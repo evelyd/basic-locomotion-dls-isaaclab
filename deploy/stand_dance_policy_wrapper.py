@@ -96,7 +96,27 @@ class StandDancePolicyWrapper:
         self.desired_joint_pos = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
 
         # gait indices
-        self.gait_indices = np.zeros(4)
+        self.gait_indices = 0.0
+
+        # Stand dance specific observation variables
+        self.world_forward_vec = np.array([1, 0, 0])
+        obs_scale_lin_vel = 2.0
+        obs_scale_ang_vel = 0.25
+        self.command_scale = np.array([obs_scale_lin_vel, obs_scale_lin_vel, obs_scale_ang_vel])
+        self.obs_scale_joint_pos = 1.0
+        self.obs_scale_joint_vel = 0.05
+
+        self.obs_scale_joint_pos_attr = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
+        self.obs_scale_joint_pos_attr.FL = np.array([self.obs_scale_joint_pos]*3)
+        self.obs_scale_joint_pos_attr.FR = np.array([self.obs_scale_joint_pos]*3)
+        self.obs_scale_joint_pos_attr.RL = np.array([self.obs_scale_joint_pos]*3)
+        self.obs_scale_joint_pos_attr.RR = np.array([self.obs_scale_joint_pos]*3)
+
+        self.obs_scale_joint_vel_attr = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
+        self.obs_scale_joint_vel_attr.FL = np.array([self.obs_scale_joint_vel]*3)
+        self.obs_scale_joint_vel_attr.FR = np.array([self.obs_scale_joint_vel]*3)
+        self.obs_scale_joint_vel_attr.RL = np.array([self.obs_scale_joint_vel]*3)
+        self.obs_scale_joint_vel_attr.RR = np.array([self.obs_scale_joint_vel]*3)
 
 
     def _get_projected_gravity(self, quat_wxyz):
@@ -136,42 +156,30 @@ class StandDancePolicyWrapper:
 
     def _get_clock_inputs(self, step_dt):
 
-        # Define parameters from the original config
-        default_gait_freq = 2.5
+        clock_inputs = torch.zeros(4, dtype=torch.double)
+
+        frequencies = config.default_gait_freq
         phases = 0.5
         offsets = 0
         bounds = 0
-        durations = 0.5 * np.ones_like(self.gait_indices)
 
-        # 2. Update the gait indices
-        self.gait_indices = np.remainder(self.gait_indices + step_dt * default_gait_freq, 1.0)
+        self.gait_indices = torch.remainder(torch.tensor(self.gait_indices).clone() + step_dt * frequencies, 1.0)
+        self.gait_indices = self.gait_indices.unsqueeze(0)
 
-        # 3. Calculate foot indices for all four feet
-        foot_indices = [
-            self.gait_indices + phases + offsets + bounds,
-            self.gait_indices + offsets,
-            self.gait_indices + bounds,
-            self.gait_indices + phases
-        ]
+        foot_indices = [self.gait_indices + phases + offsets + bounds,
+                        self.gait_indices + offsets,
+                        self.gait_indices + bounds,
+                        self.gait_indices + phases]
 
-        foot_indices_list = [np.remainder(idx, 1.0) for idx in foot_indices]
+        self.foot_indices = torch.remainder(torch.cat([foot_indices[i].unsqueeze(1) for i in range(4)], dim=1), 1.0)
 
-        for idxs in foot_indices_list:
-            stance_idxs = np.remainder(idxs, 1) < durations
-            swing_idxs = np.remainder(idxs, 1) > durations
-
-            idxs[stance_idxs] = np.remainder(idxs[stance_idxs], 1) * (0.5 / durations[stance_idxs])
-            idxs[swing_idxs] = 0.5 + (np.remainder(idxs[swing_idxs], 1) - durations[swing_idxs]) * (
-                        0.5 / (1 - durations[swing_idxs]))
-
-        # 5. Compute the final two clock inputs
-        # The original training code used only the first two from this list
-        clock_inputs = np.zeros(4)
-        clock_inputs[2] = np.sin(2 * np.pi * foot_indices[2])
-        clock_inputs[3] = np.sin(2 * np.pi * foot_indices[3])
+        clock_inputs[0] = torch.sin(2 * np.pi * foot_indices[0])
+        clock_inputs[1] = torch.sin(2 * np.pi * foot_indices[1])
+        clock_inputs[2] = torch.sin(2 * np.pi * foot_indices[2])
+        clock_inputs[3] = torch.sin(2 * np.pi * foot_indices[3])
 
         # 6. Return as a NumPy array
-        return clock_inputs
+        return clock_inputs[-2:].numpy().flatten()
 
     def compute_control(self,
             base_pos,
@@ -203,8 +211,9 @@ class StandDancePolicyWrapper:
             # base_ang_vel,
             base_projected_gravity,
             base_forward_vec,
-            ref_base_lin_vel_h[0:2] * self.command_scale[0:2],
-            [ref_base_ang_vel[2]] * self.command_scale[2],
+            [ref_base_lin_vel_h[0] * self.command_scale[0]],
+            [ref_base_lin_vel_h[1] * self.command_scale[1]],
+            [ref_base_ang_vel[2] * self.command_scale[2]],
             [joints_pos_delta_scaled.FL[0]], [joints_pos_delta_scaled.FR[0]], [joints_pos_delta_scaled.RL[0]], [joints_pos_delta_scaled.RR[0]],
             [joints_pos_delta_scaled.FL[1]], [joints_pos_delta_scaled.FR[1]], [joints_pos_delta_scaled.RL[1]], [joints_pos_delta_scaled.RR[1]],
             [joints_pos_delta_scaled.FL[2]], [joints_pos_delta_scaled.FR[2]], [joints_pos_delta_scaled.RL[2]], [joints_pos_delta_scaled.RR[2]],
@@ -214,7 +223,6 @@ class StandDancePolicyWrapper:
             self.past_rl_actions.copy(),
             clock_inputs,
         ])
-
 
         # Phase Signal
         if(self.use_clock_signal):
@@ -257,7 +265,7 @@ class StandDancePolicyWrapper:
 
         # Action Filtering
         if(self.use_action_filter):
-            alpha = 0.8
+            alpha = 0.5 #0.8
             past_rl_actions_temp = self.past_rl_actions.copy()
             self.past_rl_actions = rl_action_temp.copy()
             rl_action_temp = alpha * rl_action_temp + (1-alpha) * past_rl_actions_temp

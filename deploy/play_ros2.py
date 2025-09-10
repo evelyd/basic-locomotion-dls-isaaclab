@@ -94,15 +94,6 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
         self.joint_positions = np.zeros(12)
         self.joint_velocities = np.zeros(12)
 
-        # Stand dance specific observation variables
-        self.world_forward_vec = np.array([1, 0, 0])
-        obs_scale_lin_vel = 2.0
-        obs_scale_ang_vel = 0.25
-        self.command_scale = np.array([obs_scale_lin_vel, obs_scale_lin_vel, obs_scale_ang_vel])
-        self.obs_scale_joint_pos = 1.0
-        self.obs_scale_joint_vel = 0.05
-        self.clock_inputs = np.zeros(4)
-
         # Initialization of variables used in the main control loop --------------------------------
         self.locomotion_policy = LocomotionPolicyWrapper(env=self.env)
 
