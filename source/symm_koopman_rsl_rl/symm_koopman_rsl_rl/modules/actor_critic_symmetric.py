@@ -85,10 +85,10 @@ class ActorCriticSymm(nn.Module):
         # Representation of x := [q, v] ∈ Q_js x TqQ_js      =>    ρ_X_js(g) := ρ_Q_js(g) ⊕ ρ_TqQ_js(g)  | g ∈ G
         # for push door task
         if "stand_dance" in task.lower():
-            base_transition = ([rep_Rd, rep_Rd, rep_xy, rep_euler_z, rep_TqQJ, rep_TqQJ, rep_TqQJ, rep_kin_three_two]) * 3
+            base_transition = ([rep_Rd, rep_Rd, rep_Rd, rep_Rd, rep_xy, rep_euler_z, rep_TqQJ, rep_TqQJ, rep_TqQJ, rep_kin_three_two]) * 3
             rep_extra_obs = [rep_Rd, rep_Rd_pseudo, trivial_rep, trivial_rep, rep_friction, rep_Rd, trivial_rep, trivial_rep, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two, rep_kin_three_two] #TODO are contact os reps correct? same approach as symmloco
             if is_dae:
-                latent_transition = [rep_Rd, rep_Rd, rep_xy, rep_euler_z, rep_TqQJ, rep_TqQJ, rep_TqQJ, rep_kin_three_two] * obs_state_ratio
+                latent_transition = [rep_Rd, rep_Rd, rep_Rd, rep_Rd, rep_xy, rep_euler_z, rep_TqQJ, rep_TqQJ, rep_TqQJ, rep_kin_three_two] * obs_state_ratio
         else: # for locomotion tasks
             base_transition = ([rep_Rd, rep_Rd_pseudo, rep_Rd, rep_xy, rep_euler_z, rep_TqQJ, rep_TqQJ, rep_TqQJ, rep_kin_three]) * 5
             rep_extra_obs = []

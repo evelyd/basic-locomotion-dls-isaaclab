@@ -8,7 +8,7 @@
 import copy
 import os
 import torch
-from amp_rsl_rl.networks import ActorMoE, ActorMoESymm, ExportedActorMoESymm, SimpleEMLP, ActorEMLP, ExportedActorEMLP
+from symm_koopman_rsl_rl.modules import ActorCriticSymm, SimpleEMLP
 
 
 def export_policy_as_onnx(

@@ -4,6 +4,7 @@ import gymnasium as gym
 import torch
 import numpy as np
 import basic_locomotion_dls_isaaclab.tasks.locomotion.utils as custom_utils
+import os
 
 import isaaclab.utils.math as math_utils
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -83,6 +84,9 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         self.add_noise = self.cfg.add_noise
         noise_level = self.cfg.noise_level
         start_index = 0
+        noise_vec[start_index:start_index + 3] = self.cfg.noise_scale_gravity * noise_level # base lin vel
+        noise_vec[start_index + 3: start_index + 6] = self.cfg.noise_scale_gravity * noise_level # base ang vel
+        start_index += 6
         noise_vec[start_index:start_index + 3] = self.cfg.noise_scale_gravity * noise_level
         noise_vec[start_index + 3: start_index + 6] = self.cfg.noise_scale_gravity * noise_level
         start_index += 6
@@ -235,12 +239,13 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
             [
                 tensor
                 for tensor in (
-                    self._imu.data.lin_acc_b,
-                    self._imu.data.ang_vel_b,
+                    self._imu.data.lin_acc_b * self.cfg.obs_scale_lin_vel,
+                    self._imu.data.ang_vel_b * self.cfg.obs_scale_ang_vel,
                     self._robot.data.projected_gravity_b,
-                    self._commands,
-                    self._robot.data.joint_pos - self._robot.data.default_joint_pos,
-                    self._robot.data.joint_vel,
+                    math_utils.quat_apply_inverse(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B),
+                    self._commands[:, :3] * self.command_scale,
+                    (self._robot.data.joint_pos - self._robot.data.default_joint_pos) * self.cfg.obs_scale_joint_pos,
+                    self._robot.data.joint_vel * self.cfg.obs_scale_joint_vel,
                     self._actions,
                     self._clock_inputs[:, -2:],
                 )
@@ -254,16 +259,17 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
 
         # Add noise to the observation - this is usually done in direct_rl.py in IsaacLab, but
         # the obs of cuncurrent SE does not pass from there - its prediciton yes instead!
-        if self.cfg.observation_noise_model:
-            obs_cuncurrent_state_est = self._observation_noise_model(obs_cuncurrent_state_est)
+        # i add the noise elsewhere
+        # if self.cfg.observation_noise_model:
+        #     obs_cuncurrent_state_est = self._observation_noise_model(obs_cuncurrent_state_est)
 
         # Saving data
-        output_cuncurrent_state_est = torch.cat((self._robot.data.root_lin_vel_b), dim=-1)
+        output_cuncurrent_state_est = self._robot.data.root_lin_vel_b
         self._cuncurrent_state_est_network.dataset.add_sample(obs_cuncurrent_state_est, output_cuncurrent_state_est)
 
         # Prediction
         num_episode_from_start = self.common_step_counter / 24. #self.max_episode_length #HACK this should be taken from rsl rl
-        num_final_episode_from_start = 8000.
+        num_final_episode_from_start = 10000.
         if num_episode_from_start > self.cfg.cuncurrent_state_est_ep_saving_interval:
             prediction_cuncurrent_state_est = self._cuncurrent_state_est_network(obs_cuncurrent_state_est)
             linear_velocity_b = prediction_cuncurrent_state_est[:, :3]
@@ -277,7 +283,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
                                                             learning_rate=self.cfg.cuncurrent_state_est_lr, device=self.device)
         if num_episode_from_start == num_final_episode_from_start - 10:
             # Save the network
-            self._cuncurrent_state_est_network.save_network("cuncurrent_state_estimator.pth", self.device)
+            self._cuncurrent_state_est_network.save_network(f"cuncurrent_state_estimator_{self.cfg.run_setting_detail}_final.pth", self.device)
 
         return linear_velocity_b
 

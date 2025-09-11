@@ -29,6 +29,6 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 # from .actor_critic import ActorCritic
-from .actor_critic_symmetric import ActorCriticSymm
+from .actor_critic_symmetric import ActorCriticSymm, SimpleEMLP
 # from .actor_critic_recurrent import ActorCriticRecurrent
 # from .actor_critic_symmetric_dae import ActorCriticSymmDAE

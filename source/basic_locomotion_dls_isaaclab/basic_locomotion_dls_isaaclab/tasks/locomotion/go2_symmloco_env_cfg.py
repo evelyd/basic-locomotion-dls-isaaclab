@@ -723,6 +723,9 @@ class Go2StandDanceEnvCfg(ManagerBasedRLEnvCfg): # <--- Inherit from ManagerBase
 class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     """Configuration for Go2StandDance environment in Isaac Lab."""
 
+    # run_setting_detail = "baseline" # for concurrent state est model saving
+    run_setting_detail = "emlp_ecdae_online"
+
     episode_length_s = 20.0
     decimation = 4
     action_scale = 0.5
@@ -732,7 +735,10 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     desired_clip_actions = 3.0
     use_filter_actions = True
 
-    observation_space = 3 # projected gravity
+    # total of
+    observation_space = 3 # base lin vel
+    observation_space += 3 # base ang vel
+    observation_space += 3 # projected gravity
     observation_space += 3 # projected_forward_vec
     observation_space += 3 # velocity commands
     observation_space += 12 # joint pos
@@ -902,14 +908,14 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
             "feet_clearance_cmd_linear": -300,
             "collision": -2.0e2,
             "torque_limits": -0.01,
-            "tracking_lin_vel": 0.8,
-            "tracking_ang_vel": 0.5,
+            "tracking_lin_vel": 0.8 * 5,
+            "tracking_ang_vel": 0.5 * 5,
             "rear_air": -0.5,
             "action_rate": -0.07,
             "action_q_diff": action_q_diff_wt,
             "stand_air": -50 * 0,
-            "dof_vel": -1e-4,
-            "dof_acc": -7.5e-7,
+            "dof_vel": -2e-4,
+            "dof_acc": -1e-6,
             "dof_pos_limits": -10,
             "upright": 2.2e2,
             "lift_up_linear": 0.8e2,
@@ -918,7 +924,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
             "foot_shift": -50,
             # "termination": -50.0,
             "lin_vel_z": -2.0e5,
-            "ang_vel_xy": -0.05e5,
+            "ang_vel_xy": -0.05e4,
             "orientation": -0.,
             "torques": -0.00001,
             "base_height": -0.,

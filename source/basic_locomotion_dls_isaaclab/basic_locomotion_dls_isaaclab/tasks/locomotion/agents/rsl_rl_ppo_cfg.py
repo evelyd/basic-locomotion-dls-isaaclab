@@ -377,7 +377,8 @@ class CommonCfgPPO(LeggedRobotCfgPPO):
 @configclass
 class StandDanceCfgPPO(CommonCfgPPO):
     """Configuration for the stand dance task using PPO."""
-    experiment_name = "stand_dance_cyber_aliengo"
+    experiment_name = "stand_dance_go2"
+    wandb_project = experiment_name
     max_iterations = 30000
     save_interval = 300
 
@@ -385,6 +386,7 @@ class StandDanceCfgPPO(CommonCfgPPO):
 class StandDanceEMLPCfgPPO(StandDanceCfgPPO):
     """Configuration for the stand dance task using PPO."""
     experiment_name = "stand_dance_go2_emlp"
+    wandb_project = experiment_name
     max_iterations = 30000
     save_interval = 300
     robot_name = 'go2'
@@ -401,6 +403,7 @@ class StandDanceEMLPCfgPPO(StandDanceCfgPPO):
 class StandDanceCDAEOnlineCfgPPO(StandDanceCfgPPO):
     """Configuration for the stand dance task using PPO."""
     experiment_name = "stand_dance_go2_cdae_online"
+    wandb_project = experiment_name
     max_iterations = 30000
     save_interval = 300
 
@@ -452,6 +455,7 @@ class StandDanceCDAEOnlineCfgPPO(StandDanceCfgPPO):
 class StandDanceEMLPECDAEOnlineCfgPPO(StandDanceCfgPPO):
     """Configuration for the stand dance task using PPO."""
     experiment_name = "stand_dance_go2_emlp_ecdae_online"
+    wandb_project = experiment_name
     max_iterations = 30000
     save_interval = 300
 
@@ -480,7 +484,7 @@ class StandDanceEMLPECDAEOnlineCfgPPO(StandDanceCfgPPO):
     )
 
     koopman = KoopmanCfg(
-        model={'name': 'cdae',
+        model={'name': 'ecdae',
                'equivariant': False,
                'activation': 'ELU',
                'num_layers': 5,
