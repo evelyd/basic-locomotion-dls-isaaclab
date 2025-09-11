@@ -7,6 +7,7 @@
 
 """Launch Isaac Sim Simulator first."""
 
+import pinocchio as pin
 import argparse
 import sys
 
