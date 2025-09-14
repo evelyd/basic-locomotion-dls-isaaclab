@@ -36,7 +36,7 @@ from basic_locomotion_dls_isaaclab.assets.go2_asset import GO2_CFG
 
 
 # --- Global Flags ---
-USE_VEL_CMD = False #True
+USE_VEL_CMD = True
 OBS_T = False
 INIT_POSE = "sit"
 
@@ -568,8 +568,8 @@ SIT_INIT_STATE = ArticulationCfg.InitialStateCfg(
         joint_pos={
             ".*L_hip_joint": 0.0,
             ".*R_hip_joint": 0.0,
-            ".*_thigh_joint": 1.3,
-            ".*_calf_joint": -2.5,
+            ".*_thigh_joint": 1.2,
+            ".*_calf_joint": -2.2,
         },
         joint_vel={".*": 0.0},
 )
@@ -753,7 +753,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
         single_observation_space = observation_space # Placeholder. Later we may add map, but only from the latest obs
         observation_space *= history_length
 
-    use_imu = False
+    # use_imu = False
 
     use_cuncurrent_state_est = True
     if(use_cuncurrent_state_est):
@@ -860,14 +860,14 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
 
     commands: MyCommandsCfg = MyCommandsCfg(
         ranges={
-            "lin_vel_x": [-0.3, 0.3],
-            "lin_vel_y": [-0.0, 0.0],
-            "ang_vel_z": [-0.3, 0.3],
-            # "lin_vel_x": [-0.0, 0.0],
+            # "lin_vel_x": [-0.3, 0.3],
             # "lin_vel_y": [-0.0, 0.0],
-            # "ang_vel_z": [-0.0, 0.0],
-            "heading": [-0.5 * np.pi, 0.5 * np.pi],
-            # "heading": [0.0, 0.0],
+            # "ang_vel_z": [-0.3, 0.3],
+            "lin_vel_x": [-0.0, 0.0],
+            "lin_vel_y": [-0.0, 0.0],
+            "ang_vel_z": [-0.0, 0.0],
+            # "heading": [-0.5 * np.pi, 0.5 * np.pi],
+            "heading": [0.0, 0.0],
         }
     )
 
@@ -882,7 +882,6 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     reward_base_height_target = 0.45
     reward_soft_dof_vel_limit = 1.
     reward_max_contact_force = 100.
-    control_action_scale = 0.5 # TODO in isaacgym also used for other stuff, here only used in reward
     reward_upright_vec = [0.1, 0.0, 1.0]
 
     # Stand dance specific

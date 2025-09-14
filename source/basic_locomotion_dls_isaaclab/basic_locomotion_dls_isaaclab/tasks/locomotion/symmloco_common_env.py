@@ -833,7 +833,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
 
     def _reward_action_q_diff(self):
         condition = self.episode_length_buf <= self.cfg.reward_allow_contact_steps
-        q_diff_buf = torch.abs(self._robot.data.default_joint_pos + self.cfg.control_action_scale * self._actions - self._robot.data.joint_pos)
+        q_diff_buf = torch.abs(self._robot.data.default_joint_pos + self.cfg.action_scale * self._actions - self._robot.data.joint_pos)
         # reward = torch.sum(q_diff_buf, dim=-1)
         reward = torch.sum(torch.square(q_diff_buf), dim=-1) * condition.float()
         return reward
