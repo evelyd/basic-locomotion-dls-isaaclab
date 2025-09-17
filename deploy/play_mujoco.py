@@ -112,7 +112,7 @@ if __name__ == '__main__':
         robot=robot_name,
         scene=scene_name,
         sim_dt=simulation_dt,
-        base_vel_command_type="human",  # "forward", "random", "forward+rotate", "human"
+        base_vel_command_type="forward",  # "forward", "random", "forward+rotate", "human"
     )
 
     # Set sit pose initially if specified

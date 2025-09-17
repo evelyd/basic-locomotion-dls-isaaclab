@@ -214,38 +214,38 @@ class LocomotionPolicyWrapper:
 
         # Fill the observation vector
         joints_pos_delta = joints_pos - self.default_joint_pos
-        # obs = np.concatenate([
-        #     base_vel, # this could be imu linear acc if use_imu or linear vel from state est
-        #     base_ang_vel,
-        #     base_projected_gravity,
-        #     ref_base_lin_vel_h[0:2],
-        #     [ref_base_ang_vel[2]],
-        #     [joints_pos_delta.FL[0]], [joints_pos_delta.FR[0]], [joints_pos_delta.RL[0]], [joints_pos_delta.RR[0]],
-        #     [joints_pos_delta.FL[1]], [joints_pos_delta.FR[1]], [joints_pos_delta.RL[1]], [joints_pos_delta.RR[1]],
-        #     [joints_pos_delta.FL[2]], [joints_pos_delta.FR[2]], [joints_pos_delta.RL[2]], [joints_pos_delta.RR[2]],
-        #     [joints_vel.FL[0]], [joints_vel.FR[0]], [joints_vel.RL[0]], [joints_vel.RR[0]],
-        #     [joints_vel.FL[1]], [joints_vel.FR[1]], [joints_vel.RL[1]], [joints_vel.RR[1]],
-        #     [joints_vel.FL[2]], [joints_vel.FR[2]], [joints_vel.RL[2]], [joints_vel.RR[2]],
-        #     self.past_rl_actions.copy(),
-        # ])
-
         obs = np.concatenate([
-            base_vel * config.obs_scale_lin_vel, # this could be imu linear acc if use_imu or linear vel from state est
-            base_ang_vel * config.obs_scale_ang_vel, # this could be imu angular vel if use_imu or angular vel from state est
+            base_vel, # this could be imu linear acc if use_imu or linear vel from state est
+            base_ang_vel,
             base_projected_gravity,
-            self._get_forward_vector(base_quat_wxyz),
-            [ref_base_lin_vel_h[0] * config.obs_scale_lin_vel],
-            [ref_base_lin_vel_h[1] * config.obs_scale_lin_vel],
-            [ref_base_ang_vel[2] * config.obs_scale_ang_vel],
-            [joints_pos_delta.FL[0] * config.obs_scale_joint_pos], [joints_pos_delta.FR[0] * config.obs_scale_joint_pos], [joints_pos_delta.RL[0] * config.obs_scale_joint_pos], [joints_pos_delta.RR[0] * config.obs_scale_joint_pos],
-            [joints_pos_delta.FL[1] * config.obs_scale_joint_pos], [joints_pos_delta.FR[1] * config.obs_scale_joint_pos], [joints_pos_delta.RL[1] * config.obs_scale_joint_pos], [joints_pos_delta.RR[1] * config.obs_scale_joint_pos],
-            [joints_pos_delta.FL[2] * config.obs_scale_joint_pos], [joints_pos_delta.FR[2] * config.obs_scale_joint_pos], [joints_pos_delta.RL[2] * config.obs_scale_joint_pos], [joints_pos_delta.RR[2] * config.obs_scale_joint_pos],
-            [joints_vel.FL[0] * config.obs_scale_joint_vel], [joints_vel.FR[0] * config.obs_scale_joint_vel], [joints_vel.RL[0] * config.obs_scale_joint_vel], [joints_vel.RR[0] * config.obs_scale_joint_vel],
-            [joints_vel.FL[1] * config.obs_scale_joint_vel], [joints_vel.FR[1] * config.obs_scale_joint_vel], [joints_vel.RL[1] * config.obs_scale_joint_vel], [joints_vel.RR[1] * config.obs_scale_joint_vel],
-            [joints_vel.FL[2] * config.obs_scale_joint_vel], [joints_vel.FR[2] * config.obs_scale_joint_vel], [joints_vel.RL[2] * config.obs_scale_joint_vel], [joints_vel.RR[2] * config.obs_scale_joint_vel],
+            ref_base_lin_vel_h[0:2],
+            [ref_base_ang_vel[2]],
+            [joints_pos_delta.FL[0]], [joints_pos_delta.FR[0]], [joints_pos_delta.RL[0]], [joints_pos_delta.RR[0]],
+            [joints_pos_delta.FL[1]], [joints_pos_delta.FR[1]], [joints_pos_delta.RL[1]], [joints_pos_delta.RR[1]],
+            [joints_pos_delta.FL[2]], [joints_pos_delta.FR[2]], [joints_pos_delta.RL[2]], [joints_pos_delta.RR[2]],
+            [joints_vel.FL[0]], [joints_vel.FR[0]], [joints_vel.RL[0]], [joints_vel.RR[0]],
+            [joints_vel.FL[1]], [joints_vel.FR[1]], [joints_vel.RL[1]], [joints_vel.RR[1]],
+            [joints_vel.FL[2]], [joints_vel.FR[2]], [joints_vel.RL[2]], [joints_vel.RR[2]],
             self.past_rl_actions.copy(),
-            self._get_rear_clock_inputs(1/(self.RL_FREQ))
         ])
+
+        # obs = np.concatenate([
+        #     base_vel * config.obs_scale_lin_vel, # this could be imu linear acc if use_imu or linear vel from state est
+        #     base_ang_vel * config.obs_scale_ang_vel, # this could be imu angular vel if use_imu or angular vel from state est
+        #     base_projected_gravity,
+        #     self._get_forward_vector(base_quat_wxyz),
+        #     [ref_base_lin_vel_h[0] * config.obs_scale_lin_vel],
+        #     [ref_base_lin_vel_h[1] * config.obs_scale_lin_vel],
+        #     [ref_base_ang_vel[2] * config.obs_scale_ang_vel],
+        #     [joints_pos_delta.FL[0] * config.obs_scale_joint_pos], [joints_pos_delta.FR[0] * config.obs_scale_joint_pos], [joints_pos_delta.RL[0] * config.obs_scale_joint_pos], [joints_pos_delta.RR[0] * config.obs_scale_joint_pos],
+        #     [joints_pos_delta.FL[1] * config.obs_scale_joint_pos], [joints_pos_delta.FR[1] * config.obs_scale_joint_pos], [joints_pos_delta.RL[1] * config.obs_scale_joint_pos], [joints_pos_delta.RR[1] * config.obs_scale_joint_pos],
+        #     [joints_pos_delta.FL[2] * config.obs_scale_joint_pos], [joints_pos_delta.FR[2] * config.obs_scale_joint_pos], [joints_pos_delta.RL[2] * config.obs_scale_joint_pos], [joints_pos_delta.RR[2] * config.obs_scale_joint_pos],
+        #     [joints_vel.FL[0] * config.obs_scale_joint_vel], [joints_vel.FR[0] * config.obs_scale_joint_vel], [joints_vel.RL[0] * config.obs_scale_joint_vel], [joints_vel.RR[0] * config.obs_scale_joint_vel],
+        #     [joints_vel.FL[1] * config.obs_scale_joint_vel], [joints_vel.FR[1] * config.obs_scale_joint_vel], [joints_vel.RL[1] * config.obs_scale_joint_vel], [joints_vel.RR[1] * config.obs_scale_joint_vel],
+        #     [joints_vel.FL[2] * config.obs_scale_joint_vel], [joints_vel.FR[2] * config.obs_scale_joint_vel], [joints_vel.RL[2] * config.obs_scale_joint_vel], [joints_vel.RR[2] * config.obs_scale_joint_vel],
+        #     self.past_rl_actions.copy(),
+        #     self._get_rear_clock_inputs(1/(self.RL_FREQ))
+        # ])
 
         # Phase Signal
         if(self.use_clock_signal):

@@ -4,7 +4,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path+"/../")
 sys.path.append(dir_path+"/../scripts/rsl_rl")
 
-robot = 'go2'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'mini_cheetah'
+robot = 'aliengo'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'mini_cheetah'
 scene = 'flat'  # flat, random_boxes, random_pyramids, perlin
 
 # policy_path = "/home/iit.local/gturrisi/isaaclab_ws_home/basic-locomotion-dls-isaaclab/tested_policies/hyqreal/2025-07-23_09-19-46_8k_128_128_128_hyq/exported/policy.onnx"
@@ -14,7 +14,14 @@ scene = 'flat'  # flat, random_boxes, random_pyramids, perlin
 # policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9900_2025-09-11_17-12-07_baseline_base_est.onnx"
 # policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9900_2025-09-11_17-14-58_emlp_ecdae_online_base_est.onnx"
 # policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_5700_2025-09-12_16-35-23_fixed_sit_joint_init.onnx"
-policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9750_2025-09-09_23-02-03_dof_acc_e6.onnx"
+# policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9750_2025-09-09_23-02-03_dof_acc_e6.onnx"
+# policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9900_2025-09-12_16-35-23_fixed_sit.onnx"
+# policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9900_2025-09-12_16-59-23_jerk_mitigation.onnx"
+# policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9300_2025-09-12_16-36-16_emlp_ecdae_fixed_sit.onnx"
+# policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/policy_9900_2025-09-12_17-00-30_emlp_ecdae_jerk_mitigation.onnx"
+# policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/aliengo/policy_300_baseline_rough_blind.onnx"
+# policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/aliengo/policy_4200_2025-09-15_01-15-26_rough_blind_baseline.onnx"
+policy_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/aliengo/policy_4200_2025-09-15_01-13-33_rough_blind_emlp_ecdae_online.onnx"
 # ----------------------------------------------------------------------------------------------------------------
 if(robot == "aliengo"):
     Kp_walking = 25.
@@ -53,9 +60,9 @@ use_clip_actions = True  # If True, clip the actions to avoid too high torques
 clip_actions = 3.0  # Clip the actions to avoid too high torques
 
 use_observation_history = True  # If True, use the history of the actions to compute the RL policy
-history_length = 3  # Length of the history of the actions to be used in the RL policy
+history_length = 5  # Length of the history of the actions to be used in the RL policy
 
-use_clock_signal = False  # If True, use the clock signal in the RL policy
+use_clock_signal = True #False  # If True, use the clock signal in the RL policy
 
 use_vision = False  # If True, use the vision observations in the RL policy
 if(use_vision):
@@ -63,14 +70,18 @@ if(use_vision):
     size_x_heightmap = 0.6  # Size of the heightmap in meters
     size_y_heightmap = 0.6  # Size of the heightmap in meters
 
-observation_space = 53  # Number of observations in the RL policy
+observation_space = 48  # Number of observations in the RL policy
 
-use_imu = False
+use_imu = True
 use_rma = False
-use_cuncurrent_state_est = use_imu
+use_cuncurrent_state_est = False #use_imu
 # cuncurrent_state_est_network_path = dir_path + "/../tested_policies/" + robot + "/2025-09-07_19-13-16_go2_cuncurrent_se" + "/exported/cuncurrent_state_estimator.pth"
 # cuncurrent_state_est_network_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/cuncurrent_state_estimator_baseline_final.pth"
-cuncurrent_state_est_network_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/cuncurrent_state_estimator_emlp_ecdae_online_final.pth"
+# cuncurrent_state_est_network_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/cuncurrent_state_estimator_emlp_ecdae_online_final.pth"
+# cuncurrent_state_est_network_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/cuncurrent_state_estimator_baseline_final_fixed_sit.pth"
+# cuncurrent_state_est_network_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/cuncurrent_state_estimator_baseline_jerk_mitigation_final.pth"
+# cuncurrent_state_est_network_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/cuncurrent_state_estimator_emlp_ecdae_online_final_fixed_sit.pth"
+cuncurrent_state_est_network_path = "/home/evelyd/git/basic-locomotion-dls-isaaclab/tested_policies/go2/cuncurrent_state_estimator_emlp_ecdae_online_jerk_mitigation_final.pth"
 
 # stand dance specific
 default_gait_freq = 2.5
@@ -78,8 +89,8 @@ obs_scale_joint_pos = 1.0
 obs_scale_joint_vel = 0.05
 obs_scale_lin_vel = 2.0
 obs_scale_ang_vel = 0.25
-init_base_height = 0.22
-init_qpos = [0.0, 1.2, -2.2,
-             0.0, 1.2, -2.2,
-             0.0, 1.2, -2.2,
-             0.0, 1.2, -2.2]  # Sit pose
+# init_base_height = 0.22
+# init_qpos = [0.0, 1.2, -2.2,
+#              0.0, 1.2, -2.2,
+#              0.0, 1.2, -2.2,
+#              0.0, 1.2, -2.2]  # Sit pose
