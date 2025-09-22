@@ -184,3 +184,23 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:RoughPPORunnerCfg",
     },
 )
+
+gym.register(
+    id="Locomotion-Go2-Rough-Blind-EMLP-ECDAE-Online",
+    entry_point=LocomotionEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": Go2RoughBlindEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:RoughPPOEMLPECDAEOnlineRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Locomotion-Aliengo-Rough-Blind-EMLP-ECDAE-Online",
+    entry_point=LocomotionEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": AliengoRoughBlindEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:RoughPPOEMLPECDAEOnlineRunnerCfg",
+    },
+)
