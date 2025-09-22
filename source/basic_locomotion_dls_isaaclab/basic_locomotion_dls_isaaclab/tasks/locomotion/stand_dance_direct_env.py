@@ -27,6 +27,26 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         self.stand_air_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         self.abrupt_change_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
+        # Define root states
+        self.upright_root_state = torch.tensor(
+            [0.0, 0.0, 0.445, -0.7071068, 0.0, 0.7071068, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            device=self.device,
+            dtype=torch.float
+        )
+        self.sit_root_state = torch.tensor(
+            [0.0, 0.0, 0.22, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            device=self.device,
+            dtype=torch.float
+        )
+        self.upright_joint_pos = torch.tensor(
+            [0.0, 2.3, -2.0, 0.0, 2.3, -2.0, 0.0, 2.3, -2.0, 0.0, 2.3, -2.0],
+            device=self.device
+        )
+        self.sit_joint_pos = torch.tensor(
+            [0.0, 1.2, -2.2, 0.0, 1.2, -2.2, 0.0, 1.2, -2.2, 0.0, 1.2, -2.2],
+            device=self.device
+        )
+
     def _compute_common_obs(self):
 
         # Choosing the main source of observation
@@ -172,7 +192,65 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         self._commands[env_ids, 0:1] = torch.sign(conti_velx_cmd) * torch.round(torch.abs(conti_velx_cmd) / 0.1) * 0.1
 
     def _reset_idx(self, env_ids):
-        super()._reset_idx(env_ids)
+        # Call the superclass method to handle general reset logic
+        # super()._reset_idx(env_ids)
+
+        # Convert the boolean mask to a tensor of integer indices
+        reset_indices = torch.nonzero(env_ids, as_tuple=True)[0]
+        num_resets = len(reset_indices)
+
+        # If no environments need to be reset, exit early
+        if num_resets == 0:
+            return
+
+        # Get the state for only the environments to be reset
+        reset_state = self.scene.get_state(reset_indices)
+        robot_name = list(self.scene._articulations.keys())[0]
+
+        # Calculate the split point
+        half_point = num_resets // 2
+
+        # Create tensors for the two groups' desired states
+        group1_root_state = self.upright_root_state.repeat(half_point, 1)
+        group1_joint_pos = self.upright_joint_pos.repeat(half_point, 1)
+
+        group2_root_state = self.sit_root_state.repeat(num_resets - half_point, 1)
+        group2_joint_pos = self.sit_joint_pos.repeat(num_resets - half_point, 1)
+
+        # Update to have the correct x and y position
+        group1_root_state[:, 0:2] = self._robot.data.root_pos_w[reset_indices[:half_point], 0:2]
+        group2_root_state[:, 0:2] = self._robot.data.root_pos_w[reset_indices[half_point:], 0:2]
+
+        # Concatenate group states
+        combined_root_state = torch.cat((group1_root_state, group2_root_state), dim=0)
+        combined_joint_pos = torch.cat((group1_joint_pos, group2_joint_pos), dim=0)
+
+        # Assign the combined states to the reset_state dictionary
+        reset_state["articulation"][robot_name]["root_pose"] = combined_root_state[:, :7]
+        reset_state["articulation"][robot_name]["root_velocity"] = combined_root_state[:, 7:]
+        reset_state["articulation"][robot_name]["joint_position"] = combined_joint_pos
+        reset_state["articulation"][robot_name]["joint_velocity"] = torch.zeros_like(combined_joint_pos, device=self.device)
+
+        # Apply the new, modified state to the scene using the integer indices
+        self.scene.reset_to(reset_state, reset_indices)
+
+        full_state = self.scene.get_state()
+        print(f"full state after reset: {full_state['articulation'][robot_name]['root_pose'][env_ids]}")
+
+        # apply events such as randomization for environments that need a reset
+        if self.cfg.events:
+            if "reset" in self.event_manager.available_modes:
+                env_step_count = self._sim_step_counter // self.cfg.decimation
+                self.event_manager.apply(mode="reset", env_ids=env_ids, global_env_step_count=env_step_count)
+
+        # reset noise models
+        if self.cfg.action_noise_model:
+            self._action_noise_model.reset(env_ids)
+        if self.cfg.observation_noise_model:
+            self._observation_noise_model.reset(env_ids)
+
+        # reset the episode length buffer
+        self.episode_length_buf[env_ids] = 0
 
         self.init_feet_positions[env_ids] = self._robot.data.body_pos_w[env_ids][:, self._feet_ids_robot, :]
 
@@ -184,7 +262,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         extras["Episode_Termination/stand_air_termination"] = torch.count_nonzero(self.stand_air_buf[env_ids]).item()
         extras["Episode_Termination/abrupt_change_termination"] = torch.count_nonzero(self.abrupt_change_buf[env_ids]).item()
 
-        self.extras["log"].update(extras)
+        # self.extras["log"].update(extras)
 
         heading = self._get_cur_heading()
         self.last_heading[env_ids] = heading[env_ids]

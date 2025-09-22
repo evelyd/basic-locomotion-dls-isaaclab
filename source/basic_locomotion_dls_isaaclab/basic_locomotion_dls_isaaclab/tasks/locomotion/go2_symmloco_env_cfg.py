@@ -400,6 +400,31 @@ class Go2TerminationCfg:
 #                              Randomization Settings                          #
 # ---------------------------------------------------------------------------- #
 
+SIT_INIT_STATE = ArticulationCfg.InitialStateCfg(
+    pos=(0.0, 0.0, 0.22),
+        # joint_pos={
+        #     ".*L_hip_joint": 0.0,
+        #     ".*R_hip_joint": 0.0,
+        #     ".*_thigh_joint": 1.2,
+        #     ".*_calf_joint": -2.2,
+        # },
+        joint_pos=(0.0, 0.0, 0.0, 0.0, 1.2, 1.2, 1.2, 1.2, -2.2, -2.2, -2.2, -2.2),
+        joint_vel={".*": 0.0},
+)
+
+UPRIGHT_INIT_STATE = ArticulationCfg.InitialStateCfg(
+    pos=(0.0, 0.0, 0.445),
+    rot=(0, 0.7071068, 0, 0.7071068), # upright vec (0, 0, 1) as quaternion
+        # joint_pos={
+        #     ".*L_hip_joint": 0.0,
+        #     ".*R_hip_joint": 0.0,
+        #     ".*_thigh_joint": 2.3,
+        #     ".*_calf_joint": -2.0,
+        # },
+        joint_pos=(0.0, 0.0, 0.0, 0.0, 2.3, 2.3, 2.3, 2.3, -2.0, -2.0, -2.0, -2.0),
+        joint_vel={".*": 0.0},
+)
+
 @configclass
 class Go2EventCfg:
     """Configuration for randomization."""
@@ -538,7 +563,8 @@ class Go2EventCfg:
 
     # TODO i didn't have this in mine
     reset_base = EventTermCfg(
-        func=mdp.reset_root_state_uniform,
+        # func=mdp.reset_root_state_uniform,
+        func=custom_events.reset_multiple_root_state_uniform,
         mode="reset",
         params={
             "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
@@ -550,40 +576,22 @@ class Go2EventCfg:
                 "pitch": (-0.5, 0.5),
                 "yaw": (-0.5, 0.5),
             },
+            "state1": UPRIGHT_INIT_STATE,
+            "state2": SIT_INIT_STATE,
         },
     )
 
     # TODO i didn't have this one either
     reset_robot_joints = EventTermCfg(
-        func=mdp.reset_joints_by_scale,
+        func=custom_events.reset_multiple_joints_by_scale,
         mode="reset",
         params={
             "position_range": (0.5, 1.5),
             "velocity_range": (0.0, 0.0),
+            "state1": UPRIGHT_INIT_STATE,
+            "state2": SIT_INIT_STATE,
         },
     )
-
-SIT_INIT_STATE = ArticulationCfg.InitialStateCfg(
-    pos=(0.0, 0.0, 0.22),
-        joint_pos={
-            ".*L_hip_joint": 0.0,
-            ".*R_hip_joint": 0.0,
-            ".*_thigh_joint": 1.2,
-            ".*_calf_joint": -2.2,
-        },
-        joint_vel={".*": 0.0},
-)
-
-UPRIGHT_INIT_STATE = ArticulationCfg.InitialStateCfg(
-    pos=(0.0, 0.0, 0.445),
-        joint_pos={
-            ".*L_hip_joint": 0.0,
-            ".*R_hip_joint": 0.0,
-            ".*_thigh_joint": 2.3,
-            ".*_calf_joint": -2.0,
-        },
-        joint_vel={".*": 0.0},
-)
 
 @configclass
 class Go2StandDanceSceneCfg(InteractiveSceneCfg):
@@ -778,7 +786,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     noise_scale_ang_range = [1.0, 1.0]
     noise_scale_gravity = 0.05
 
-    default_gait_freq = 2.5
+    default_gait_freq = 1.4
     kappa_gait_probs = 0.07
     measure_heights = False
 
@@ -910,11 +918,11 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
             "tracking_lin_vel": 0.8 * 5,
             "tracking_ang_vel": 0.5 * 5,
             "rear_air": -0.5,
-            "action_rate": -0.07,
+            "action_rate": -0.07e1,
             "action_q_diff": action_q_diff_wt,
             "stand_air": -50 * 0,
-            "dof_vel": -2e-4,
-            "dof_acc": -1e-6,
+            "dof_vel": -2e-3,
+            "dof_acc": -1e-5,
             "dof_pos_limits": -10,
             "upright": 2.2e2,
             "lift_up_linear": 0.8e2,
@@ -940,11 +948,18 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
 
     #TODO use the action and obs noise models same as in go2 env cfg?
 
-    def __post_init__(self):
-        """Post initialization."""
+    # def __post_init__(self):
+    #     """Post initialization."""
 
-        # Call parent's post-init for ManagerBasedEnvCfg
-        super().__post_init__()
+    #     # Call parent's post-init for ManagerBasedEnvCfg
+    #     super().__post_init__()
 
-        if INIT_POSE == "sit":
-            self.robot.replace(init_state=SIT_INIT_STATE)
+    #     # set 50% envs to sit, 50% to upright
+    #     self.half_point = self.scene.num_envs // 2
+    #     self.sit_init_state = SIT_INIT_STATE
+    #     self.upright_init_state = UPRIGHT_INIT_STATE
+    #     # new_init_state = [SIT_INIT_STATE] * half_point + [UPRIGHT_INIT_STATE] * (self.scene.num_envs - half_point)
+    #     # self.robot.replace(init_state=new_init_state)
+
+    #     # if INIT_POSE == "sit":
+    #     # self.robot.replace(init_state=UPRIGHT_INIT_STATE)
