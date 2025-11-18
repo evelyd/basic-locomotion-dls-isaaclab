@@ -7,7 +7,7 @@ import time
 import numpy as np
 from tqdm import tqdm
 import sys
-import os 
+import os
 dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path+"/../")
 sys.path.append(dir_path+"/../scripts/rsl_rl")
@@ -20,7 +20,9 @@ from gym_quadruped.sensors.heightmap import HeightMap
 from gym_quadruped.utils.mujoco.visual import render_sphere
 
 # Locomotion Policy imports
-from locomotion_policy_wrapper import LocomotionPolicyWrapper
+# from locomotion_policy_wrapper import LocomotionPolicyWrapper
+from stand_dance_policy_wrapper import StandDancePolicyWrapper as LocomotionPolicyWrapper
+
 
 import config
 
@@ -54,8 +56,8 @@ if __name__ == '__main__':
         resolution_heightmap = config.training_env["height_scanner"]["pattern_cfg"]["resolution"]
         num_rows_heightmap = round(config.training_env["height_scanner"]["pattern_cfg"]["size"][0]/resolution_heightmap) + 1
         num_cols_heightmap = round(config.training_env["height_scanner"]["pattern_cfg"]["size"][1]/resolution_heightmap) + 1
-        heightmap = HeightMap(num_rows=num_rows_heightmap, num_cols=num_cols_heightmap, dist_x=resolution_heightmap, dist_y=resolution_heightmap, mj_model=env.mjModel, mj_data=env.mjData)     
-    
+        heightmap = HeightMap(num_rows=num_rows_heightmap, num_cols=num_cols_heightmap, dist_x=resolution_heightmap, dist_y=resolution_heightmap, mj_model=env.mjModel, mj_data=env.mjData)
+
 
     # --------------------------------------------------------------
     RENDER_FREQ = 30  # Hz
@@ -63,7 +65,7 @@ if __name__ == '__main__':
 
     while True:
         step_start = time.time()
-        
+
         # Get the current state of the robot -----------------------------------------------------
         qpos, qvel = env.mjData.qpos, env.mjData.qvel
         base_lin_vel = env.base_lin_vel(frame='base')
@@ -88,7 +90,7 @@ if __name__ == '__main__':
         joints_pos.FR = qpos[env.legs_qpos_idx.FR]
         joints_pos.RL = qpos[env.legs_qpos_idx.RL]
         joints_pos.RR = qpos[env.legs_qpos_idx.RR]
-    
+
         joints_vel = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
         joints_vel.FL = qvel[env.legs_qvel_idx.FL]
         joints_vel.FR = qvel[env.legs_qvel_idx.FR]
@@ -98,20 +100,20 @@ if __name__ == '__main__':
 
         if(locomotion_policy.use_vision):
             heightmap.update_height_map(env.mjData.qpos[0:3], yaw=env.base_ori_euler_xyz[2])
-    
+
         # RL controller --------------------------------------------------------------
-        if env.step_num % round(1 / (locomotion_policy.RL_FREQ * simulation_dt)) == 0:            
-            
+        if env.step_num % round(1 / (locomotion_policy.RL_FREQ * simulation_dt)) == 0:
+
             desired_joint_pos = locomotion_policy.compute_control(
-                        base_pos=base_pos, 
-                        base_ori_euler_xyz=base_ori_euler_xyz, 
+                        base_pos=base_pos,
+                        base_ori_euler_xyz=base_ori_euler_xyz,
                         base_quat_wxyz=base_quat_wxyz,
-                        base_lin_vel=base_lin_vel, 
+                        base_lin_vel=base_lin_vel,
                         base_ang_vel=base_ang_vel,
                         heading_orientation_SO3=heading_orientation_SO3,
-                        joints_pos=joints_pos, 
+                        joints_pos=joints_pos,
                         joints_vel=joints_vel,
-                        ref_base_lin_vel=ref_base_lin_vel, 
+                        ref_base_lin_vel=ref_base_lin_vel,
                         ref_base_ang_vel=ref_base_ang_vel,
                         imu_linear_acceleration=imu_linear_acceleration,
                         imu_angular_velocity=imu_angular_velocity,
@@ -131,7 +133,7 @@ if __name__ == '__main__':
         error_joints_pos.FR = desired_joint_pos.FR - joints_pos.FR
         error_joints_pos.RL = desired_joint_pos.RL - joints_pos.RL
         error_joints_pos.RR = desired_joint_pos.RR - joints_pos.RR
-        
+
         tau = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
         tau.FL = Kp * (error_joints_pos.FL) - Kd * joints_vel.FL
         tau.FR = Kp * (error_joints_pos.FR) - Kd * joints_vel.FR
@@ -172,7 +174,7 @@ if __name__ == '__main__':
                             )
 
 
-                
+
 
     env.close()
 

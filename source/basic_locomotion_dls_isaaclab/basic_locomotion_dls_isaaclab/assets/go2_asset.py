@@ -103,7 +103,7 @@ GO2_CFG = ArticulationCfg(
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.4),
+        pos=(0.0, 0.0, 0.27),
         joint_pos={
             ".*L_hip_joint": 0.,
             ".*R_hip_joint": 0.,
@@ -113,7 +113,7 @@ GO2_CFG = ArticulationCfg(
         joint_vel={".*": 0.0},
     ),
 
-    
+
     actuators={"hip": GO2_HIP_ACTUATOR_CFG, "thigh": GO2_THIGH_ACTUATOR_CFG,
                "calf": GO2_CALF_ACTUATOR_CFG},
     soft_joint_pos_limit_factor=0.95,
