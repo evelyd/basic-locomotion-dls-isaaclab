@@ -28,22 +28,15 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         self.abrupt_change_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
         # Define root states
-        self.upright_root_state = torch.tensor(
-            [0.0, 0.0, 0.445, -0.7071068, 0.0, 0.7071068, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        self.upright_root_state = torch.tensor( # for CoM in support polygon
+            # [0.0, 0.0, 0.5, -0.6755902, 0.0, 0.7372773, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], #95 deg
+            # [0.0, 0.0, 0.5, -0.6819984, 0.0, 0.7313537, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], #94 deg
+            [0.0, 0.0, 0.5, 0.6883546, 0.0, -0.7253744, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], #93 deg
             device=self.device,
             dtype=torch.float
         )
-        self.sit_root_state = torch.tensor(
-            [0.0, 0.0, 0.22, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            device=self.device,
-            dtype=torch.float
-        )
-        self.upright_joint_pos = torch.tensor(
-            [0.0, 2.3, -2.0, 0.0, 2.3, -2.0, 0.0, 2.3, -2.0, 0.0, 2.3, -2.0],
-            device=self.device
-        )
-        self.sit_joint_pos = torch.tensor(
-            [0.0, 1.2, -2.2, 0.0, 1.2, -2.2, 0.0, 1.2, -2.2, 0.0, 1.2, -2.2],
+        self.upright_joint_pos = torch.tensor( # for CoM in support polygon
+            [0., 0., 0., 0., 0.7, 0.7, 2.4, 2.4, -1.5, -1.5, -1.5, -1.5],
             device=self.device
         )
 
@@ -193,49 +186,42 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
 
     def _reset_idx(self, env_ids):
         # Call the superclass method to handle general reset logic
-        # super()._reset_idx(env_ids)
+        super()._reset_idx(env_ids)
 
         # Convert the boolean mask to a tensor of integer indices
-        reset_indices = torch.nonzero(env_ids, as_tuple=True)[0]
-        num_resets = len(reset_indices)
+        num_resets = len(env_ids)
 
         # If no environments need to be reset, exit early
         if num_resets == 0:
             return
 
-        # Get the state for only the environments to be reset
-        reset_state = self.scene.get_state(reset_indices)
-        robot_name = list(self.scene._articulations.keys())[0]
-
         # Calculate the split point
         half_point = num_resets // 2
 
+        default_root_state = self._robot.data.default_root_state[env_ids]
+        default_root_state[:, :3] += self._terrain.env_origins[env_ids]
+        joint_pos = self._robot.data.default_joint_pos[env_ids]
+        joint_vel = self._robot.data.default_joint_vel[env_ids]
+
         # Create tensors for the two groups' desired states
+        # upright state
         group1_root_state = self.upright_root_state.repeat(half_point, 1)
         group1_joint_pos = self.upright_joint_pos.repeat(half_point, 1)
-
-        group2_root_state = self.sit_root_state.repeat(num_resets - half_point, 1)
-        group2_joint_pos = self.sit_joint_pos.repeat(num_resets - half_point, 1)
+        # standing state
+        group2_root_state = default_root_state[half_point:]
+        group2_joint_pos = joint_pos[half_point:]
 
         # Update to have the correct x and y position
-        group1_root_state[:, 0:2] = self._robot.data.root_pos_w[reset_indices[:half_point], 0:2]
-        group2_root_state[:, 0:2] = self._robot.data.root_pos_w[reset_indices[half_point:], 0:2]
+        group1_root_state[:, 0:2] = self._robot.data.root_pos_w[env_ids[:half_point], 0:2]
 
         # Concatenate group states
         combined_root_state = torch.cat((group1_root_state, group2_root_state), dim=0)
         combined_joint_pos = torch.cat((group1_joint_pos, group2_joint_pos), dim=0)
 
         # Assign the combined states to the reset_state dictionary
-        reset_state["articulation"][robot_name]["root_pose"] = combined_root_state[:, :7]
-        reset_state["articulation"][robot_name]["root_velocity"] = combined_root_state[:, 7:]
-        reset_state["articulation"][robot_name]["joint_position"] = combined_joint_pos
-        reset_state["articulation"][robot_name]["joint_velocity"] = torch.zeros_like(combined_joint_pos, device=self.device)
-
-        # Apply the new, modified state to the scene using the integer indices
-        self.scene.reset_to(reset_state, reset_indices)
-
-        full_state = self.scene.get_state()
-        print(f"full state after reset: {full_state['articulation'][robot_name]['root_pose'][env_ids]}")
+        self._robot.write_root_pose_to_sim(combined_root_state[:, :7], env_ids)
+        self._robot.write_root_velocity_to_sim(combined_root_state[:, 7:], env_ids)
+        self._robot.write_joint_state_to_sim(combined_joint_pos, joint_vel, None, env_ids)
 
         # apply events such as randomization for environments that need a reset
         if self.cfg.events:
@@ -389,8 +375,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         reward = torch.exp(-lin_vel_error/self.cfg.reward_tracking_sigma)
         forward = math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)
         reward_upright_vec = torch.tensor(self.cfg.reward_upright_vec, device=self.device).unsqueeze(0).expand(self.num_envs, -1)
-        upright_vec = custom_utils.quat_apply_yaw(self._robot.data.root_quat_w, reward_upright_vec)
-        is_stand = (torch.sum(forward * upright_vec, dim=-1) / torch.norm(upright_vec, dim=-1)) > 0.9
+        is_stand = (torch.sum(forward * reward_upright_vec, dim=-1) / torch.norm(reward_upright_vec, dim=-1)) > 0.9
 
         scale_factor_low = self.cfg.reward_scale_factor_low
         scale_factor_high = self.cfg.reward_scale_factor_high
@@ -422,8 +407,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
             reward = torch.exp(-ang_vel_error/self.cfg.reward_tracking_ang_sigma)
         forward = math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)
         reward_upright_vec = torch.tensor(self.cfg.reward_upright_vec, device=self.device).unsqueeze(0).expand(self.num_envs, -1)
-        upright_vec = custom_utils.quat_apply_yaw(self._robot.data.root_quat_w, reward_upright_vec)
-        is_stand = (torch.sum(forward * upright_vec, dim=-1) / torch.norm(upright_vec, dim=-1)) > 0.9
+        is_stand = (torch.sum(forward * reward_upright_vec, dim=-1) / torch.norm(reward_upright_vec, dim=-1)) > 0.9
         scale_factor_low = self.cfg.reward_scale_factor_low
         scale_factor_high = self.cfg.reward_scale_factor_high
         scaling_factor = (torch.clip(

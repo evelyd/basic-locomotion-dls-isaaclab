@@ -561,38 +561,6 @@ class Go2EventCfg:
         interval_range_s=(11.0, 11.0),
     )"""
 
-    # TODO i didn't have this in mine
-    reset_base = EventTermCfg(
-        # func=mdp.reset_root_state_uniform,
-        func=custom_events.reset_multiple_root_state_uniform,
-        mode="reset",
-        params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
-            "velocity_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (-0.5, 0.5),
-                "roll": (-0.5, 0.5),
-                "pitch": (-0.5, 0.5),
-                "yaw": (-0.5, 0.5),
-            },
-            "state1": UPRIGHT_INIT_STATE,
-            "state2": SIT_INIT_STATE,
-        },
-    )
-
-    # TODO i didn't have this one either
-    reset_robot_joints = EventTermCfg(
-        func=custom_events.reset_multiple_joints_by_scale,
-        mode="reset",
-        params={
-            "position_range": (0.5, 1.5),
-            "velocity_range": (0.0, 0.0),
-            "state1": UPRIGHT_INIT_STATE,
-            "state2": SIT_INIT_STATE,
-        },
-    )
-
 @configclass
 class Go2StandDanceSceneCfg(InteractiveSceneCfg):
     """Configuration for the terrain scene with a legged robot."""
@@ -887,10 +855,10 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     reward_allow_contact_steps = 0 if (INIT_POSE == "upright") else 30 if (INIT_POSE == "sit") else 50
     reward_kappa_gait_probs = 0.07
 
-    reward_base_height_target = 0.45
+    reward_base_height_target = 0.5
     reward_soft_dof_vel_limit = 1.
     reward_max_contact_force = 100.
-    reward_upright_vec = [0.1, 0.0, 1.0]
+    reward_upright_vec = [-0.0524078, 0.0, 1.0]
 
     # Stand dance specific
     reward_tracking_liftup_sigma = 0.03
