@@ -9,36 +9,23 @@ import os
 import statistics
 import time
 import torch
+import warnings
 from collections import deque
 
 import rsl_rl
-from rsl_rl.algorithms import PPO, Distillation
-from symm_koopman_rsl_rl.algorithms import PPODAEOnline #PPODAE
+from rsl_rl.algorithms import PPO
 from rsl_rl.env import VecEnv
-from rsl_rl.modules import (
-    ActorCritic,
-    ActorCriticRecurrent,
-    EmpiricalNormalization,
-    StudentTeacher,
-    StudentTeacherRecurrent,
-)
-from symm_koopman_rsl_rl.utils import export_policy_as_onnx, fill_replay_buffer
+from rsl_rl.modules import ActorCritic, ActorCriticRecurrent, resolve_rnd_config, resolve_symmetry_config
+from rsl_rl.utils import resolve_obs_groups, store_code_state
 
-from symm_koopman_rsl_rl.modules import ActorCriticSymm
-from rsl_rl.utils import store_code_state
-from dha.utils.mysc import flatten_dict
 
 class OnPolicyRunner:
-    """On-policy runner for training and evaluation."""
+    """On-policy runner for training and evaluation of actor-critic methods."""
 
     def __init__(self, env: VecEnv, train_cfg: dict, log_dir: str | None = None, device="cpu", video_interval=None, video_length=None):
         self.cfg = train_cfg
         self.alg_cfg = train_cfg["algorithm"]
         self.policy_cfg = train_cfg["policy"]
-        # self.use_wandb = train_cfg["use_wandb"]
-        self.task = self.cfg["experiment_name"]
-        if "online" in self.task:
-            self.koopman_cfg = train_cfg["koopman"]
         self.device = device
         self.env = env
         self.video_interval = video_interval
@@ -47,157 +34,24 @@ class OnPolicyRunner:
         # check if multi-gpu is enabled
         self._configure_multi_gpu()
 
-        # resolve training type depending on the algorithm
-        if self.alg_cfg["class_name"] == "PPO" or self.alg_cfg["class_name"] == "PPODAE" or self.alg_cfg["class_name"] == "PPODAEOnline":
-            self.training_type = "rl"
-        elif self.alg_cfg["class_name"] == "Distillation":
-            self.training_type = "distillation"
-        else:
-            raise ValueError(f"Training type not found for algorithm {self.alg_cfg['class_name']}.")
-
-        # resolve dimensions of observations
-        obs, extras = self.env.get_observations()
-        num_obs = obs.shape[1]
-
-        try:
-            history_length = env.cfg.history_length
-        except AttributeError:
-            history_length = 1
-
-        # resolve type of privileged observations
-        if self.training_type == "rl":
-            if "critic" in extras["observations"]:
-                self.privileged_obs_type = "critic"  # actor-critic reinforcement learnig, e.g., PPO
-                num_critic_obs = extras["observations"][self.privileged_obs_type].shape[1]
-            else:
-                self.privileged_obs_type = None
-        if self.training_type == "distillation":
-            if "teacher" in extras["observations"]:
-                self.privileged_obs_type = "teacher"  # policy distillation
-            else:
-                self.privileged_obs_type = None
-                num_critic_obs = num_obs
-
-        # resolve dimensions of privileged observations
-        if self.privileged_obs_type is not None:
-            num_privileged_obs = extras["observations"][self.privileged_obs_type].shape[1]
-        else:
-            num_privileged_obs = num_obs
-
-        num_critic_obs = num_privileged_obs
-        if "dae" in self.task.lower() and "online" in self.task.lower():
-            num_critic_obs += self.koopman_cfg['robot']['state_dim'] * self.koopman_cfg['robot']['obs_state_ratio']
-        elif "dae" in self.task.lower():
-            num_critic_obs += self.cfg['obs_state_ratio'] * self.cfg['obs_state_ratio']  # 48 is the default state dimension
-            self.model_path = self.cfg["model_path"]
-
-        from morpho_symm.utils.robot_utils import load_symmetric_system
-
-        if "online" in self.task.lower():
-            robot_name = self.koopman_cfg['robot']['name']
-            robot, G = load_symmetric_system(robot_name=robot_name)
-        elif "emlp" in self.task.lower():
-            robot_name = self.cfg['robot_name']
-            robot, G = load_symmetric_system(robot_name=robot_name)
-
-        if "online" in self.task.lower():
-            is_dae = True
-            obs_state_ratio = self.koopman_cfg['robot']['obs_state_ratio']
-        else:
-            is_dae = False
-            obs_state_ratio = 1.0
-
-        # evaluate the policy class
-        policy_class = eval(self.policy_cfg.pop("class_name"))
-        if "symm" in policy_class.__name__.lower():
-            policy = policy_class(
-                num_actor_obs=num_obs,
-                num_critic_obs=num_critic_obs,
-                task=self.task,
-                num_actions=self.env.num_actions,
-                is_dae=is_dae,
-                G=G,
-                obs_state_ratio=obs_state_ratio,
-                **self.policy_cfg
-            ).to(self.device)
-        else:
-            policy: ActorCritic | ActorCriticRecurrent | StudentTeacher | StudentTeacherRecurrent = policy_class(
-            num_obs, num_critic_obs, self.env.num_actions, **self.policy_cfg
-            ).to(self.device)
-
-        # resolve dimension of rnd gated state
-        if "rnd_cfg" in self.alg_cfg and self.alg_cfg["rnd_cfg"] is not None:
-            # check if rnd gated state is present
-            rnd_state = extras["observations"].get("rnd_state")
-            if rnd_state is None:
-                raise ValueError("Observations for the key 'rnd_state' not found in infos['observations'].")
-            # get dimension of rnd gated state
-            num_rnd_state = rnd_state.shape[1]
-            # add rnd gated state to config
-            self.alg_cfg["rnd_cfg"]["num_states"] = num_rnd_state
-            # scale down the rnd weight with timestep (similar to how rewards are scaled down in legged_gym envs)
-            self.alg_cfg["rnd_cfg"]["weight"] *= env.unwrapped.step_dt
-
-        # if using symmetry then pass the environment config object
-        if "symmetry_cfg" in self.alg_cfg and self.alg_cfg["symmetry_cfg"] is not None:
-            # this is used by the symmetry function for handling different observation terms
-            self.alg_cfg["symmetry_cfg"]["_env"] = env
-
-        # initialize algorithm
-        alg_class = eval(self.alg_cfg.pop("class_name"))
-        # self.alg: PPO | Distillation = alg_class(
-        #     policy, device=self.device, **self.alg_cfg, multi_gpu_cfg=self.multi_gpu_cfg
-        # )
-        delta_t = self.env.cfg.sim.dt * self.env.cfg.decimation
-        if "online" in alg_class.__name__.lower():
-            self.alg = alg_class(
-                koopman_cfg=self.koopman_cfg,
-                task=self.task,
-                dt=delta_t,
-                policy=policy,
-                device=self.device,
-                G=G,
-                history_length=history_length,
-                **self.alg_cfg,
-            )
-        elif "dae" in alg_class.__name__.lower():
-            self.alg = alg_class(policy, self.task, model_path=self.model_path, device=self.device, **self.alg_cfg)
-        else:
-            self.alg: PPO | Distillation = alg_class(
-                policy, device=self.device, **self.alg_cfg, multi_gpu_cfg=self.multi_gpu_cfg
-            )
-
         # store training configuration
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
-        self.empirical_normalization = self.cfg["empirical_normalization"]
-        if self.empirical_normalization:
-            self.obs_normalizer = EmpiricalNormalization(shape=[num_obs], until=1.0e8).to(self.device)
-            self.privileged_obs_normalizer = EmpiricalNormalization(shape=[num_privileged_obs], until=1.0e8).to(
-                self.device
-            )
-        else:
-            self.obs_normalizer = torch.nn.Identity().to(self.device)  # no normalization
-            self.privileged_obs_normalizer = torch.nn.Identity().to(self.device)  # no normalization
 
-        # init storage and model
-        self.alg.init_storage(
-            self.training_type,
-            self.env.num_envs,
-            self.num_steps_per_env,
-            [num_obs],
-            [num_privileged_obs],
-            [self.env.num_actions],
-        )
+        # query observations from environment for algorithm construction
+        obs = self.env.get_observations()
+        default_sets = ["critic"]
+        if "rnd_cfg" in self.alg_cfg and self.alg_cfg["rnd_cfg"] is not None:
+            default_sets.append("rnd_state")
+        self.cfg["obs_groups"] = resolve_obs_groups(obs, self.cfg["obs_groups"], default_sets)
 
-        # Initialize the replay buffer
-        if "online" in self.task.lower():
-            if hasattr(self.alg, 'replay_buffer') and "play" not in self.task.lower():
-                fill_replay_buffer(self.alg, self.env, self.obs_normalizer, self.privileged_obs_normalizer)
+        # create the algorithm
+        self.alg = self._construct_algorithm(obs)
 
         # Decide whether to disable logging
         # We only log from the process with rank 0 (main process)
         self.disable_logs = self.is_distributed and self.gpu_global_rank != 0
+
         # Logging
         self.log_dir = log_dir
         self.writer = None
@@ -206,38 +60,15 @@ class OnPolicyRunner:
         self.current_learning_iteration = 0
         self.git_status_repos = [rsl_rl.__file__]
 
-        # input(f"policy class {policy_class}, ppo class {self.alg.__class__.__name__}, num_critic_obs {num_critic_obs}, num_obs {num_obs}, num_privileged_obs {num_privileged_obs}, is_dae {is_dae}")
-
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):  # noqa: C901
         # initialize writer
-        if self.log_dir is not None and self.writer is None and not self.disable_logs:
-            # Launch either Tensorboard or Neptune & Tensorboard summary writer(s), default: Tensorboard.
-            self.logger_type = self.cfg.get("logger", "tensorboard")
-            self.logger_type = self.logger_type.lower()
+        self._prepare_logging_writer()
 
-            if self.logger_type == "neptune":
-                from rsl_rl.utils.neptune_utils import NeptuneSummaryWriter
-
-                self.writer = NeptuneSummaryWriter(log_dir=self.log_dir, flush_secs=10, cfg=self.cfg)
-                self.writer.log_config(self.env.cfg, self.cfg, self.alg_cfg, self.policy_cfg)
-            elif self.logger_type == "wandb":
-                from rsl_rl.utils.wandb_utils import WandbSummaryWriter
-                import wandb
-
-                self.writer = WandbSummaryWriter(log_dir=self.log_dir, flush_secs=10, cfg=self.cfg)
-                self.writer.log_config(self.env.cfg, self.cfg, self.alg_cfg, self.policy_cfg)
-                video_folder = os.path.join(self.log_dir, "videos", "train")
-                logged_videos = []
-            elif self.logger_type == "tensorboard":
-                from torch.utils.tensorboard import SummaryWriter
-
-                self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
-            else:
-                raise ValueError("Logger type not found. Please choose 'neptune', 'wandb' or 'tensorboard'.")
-
-        # check if teacher is loaded
-        if self.training_type == "distillation" and not self.alg.policy.loaded_teacher:
-            raise ValueError("Teacher model parameters not loaded. Please load a teacher model to distill.")
+        # Add videos to wandb
+        if self.logger_type == "wandb":
+            import wandb
+            video_folder = os.path.join(self.log_dir, "videos", "train")
+            logged_videos = []
 
         # randomize initial episode lengths (for exploration)
         if init_at_random_ep_len:
@@ -246,14 +77,8 @@ class OnPolicyRunner:
             )
 
         # start learning
-        obs, extras = self.env.get_observations()
-        privileged_obs = extras["observations"].get(self.privileged_obs_type, obs)
-        obs, privileged_obs = obs.to(self.device), privileged_obs.to(self.device)
+        obs = self.env.get_observations().to(self.device)
         self.train_mode()  # switch to train mode (for dropout for example)
-
-        # Set DAE to train mode also
-        if "online" in self.task:
-            self.alg.dae_model.train()
 
         # Book keeping
         ep_infos = []
@@ -273,8 +98,6 @@ class OnPolicyRunner:
         if self.is_distributed:
             print(f"Synchronizing parameters for rank {self.gpu_global_rank}...")
             self.alg.broadcast_parameters()
-            # TODO: Do we need to synchronize empirical normalizers?
-            #   Right now: No, because they all should converge to the same values "asymptotically".
 
         # Start training
         start_iter = self.current_learning_iteration
@@ -285,58 +108,21 @@ class OnPolicyRunner:
             with torch.inference_mode():
                 for _ in range(self.num_steps_per_env):
                     # Sample actions
-                    actions = self.alg.act(obs, privileged_obs)
-
-                    if "online" in self.task.lower():
-                        # Collect data for DAE
-                        if "stand-dance" in self.task.lower():
-                            raise NotImplementedError("DAE not implemented for Stand-Dance task yet.")
-                        else:
-                            states = obs[:, (self.alg.history_length - 1) * self.alg.state_dim: self.alg.history_length * self.alg.state_dim]
-                        current_states_for_dae = states.clone()
-                        current_actions_for_dae = actions.clone()
-
+                    actions = self.alg.act(obs)
                     # Step the environment
-                    obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
+                    obs, rewards, dones, extras = self.env.step(actions.to(self.env.device))
                     # Move to device
                     obs, rewards, dones = (obs.to(self.device), rewards.to(self.device), dones.to(self.device))
-                    # perform normalization
-                    obs = self.obs_normalizer(obs)
-                    if self.privileged_obs_type is not None:
-                        privileged_obs = self.privileged_obs_normalizer(
-                            infos["observations"][self.privileged_obs_type].to(self.device)
-                        )
-                    else:
-                        privileged_obs = obs
-
                     # process the step
-                    self.alg.process_env_step(rewards, dones, infos)
-
-                    if "online" in self.task.lower():
-                        # Get the next states for the DAE
-                        if "stand-dance" in self.task.lower():
-                            raise NotImplementedError("DAE not implemented for Stand-Dance task yet.")
-                        else:
-                            next_states = obs[:, (self.alg.history_length - 1) * self.alg.state_dim: self.alg.history_length * self.alg.state_dim]
-                        next_states_for_dae = next_states.clone()
-
-                        # Fill the PER buffer
-                        self.alg.replay_buffer.insert(
-                            current_states_for_dae.cpu(),
-                            current_actions_for_dae.cpu(),
-                            next_states_for_dae.cpu()
-                        )
-
-
+                    self.alg.process_env_step(obs, rewards, dones, extras)
                     # Extract intrinsic rewards (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.alg.rnd else None
-
                     # book keeping
                     if self.log_dir is not None:
-                        if "episode" in infos:
-                            ep_infos.append(infos["episode"])
-                        elif "log" in infos:
-                            ep_infos.append(infos["log"])
+                        if "episode" in extras:
+                            ep_infos.append(extras["episode"])
+                        elif "log" in extras:
+                            ep_infos.append(extras["log"])
                         # Update rewards
                         if self.alg.rnd:
                             cur_ereward_sum += rewards
@@ -365,159 +151,21 @@ class OnPolicyRunner:
                 start = stop
 
                 # compute returns
-                if self.training_type == "rl":
-                    self.alg.compute_returns(privileged_obs)
-
-            if "online" in self.task:
-                # Perform DAE training step
-                mean_dae_loss = 0.0
-                dae_train_time = 0.0
-                mean_dae_obs_pred_loss = 0.0
-                mean_dae_state_rec_loss = 0.0
-                mean_dae_state_pred_loss = 0.0
-
-                if len(self.alg.replay_buffer) >= self.koopman_cfg["model"]["mini_batch_size"]:
-                    dae_training_start_time = time.time()
-
-                    dae_num_mini_batches = self.koopman_cfg["model"]["num_mini_batches"]
-                    dae_mini_batch_size = self.koopman_cfg["model"]["mini_batch_size"]
-
-                    dae_losses_this_iter = []
-                    dae_obs_pred_losses_this_iter = []
-                    dae_state_rec_losses_this_iter = []
-                    dae_state_pred_losses_this_iter = []
-
-                    # Anneal beta for Importance Sampling weights
-                    current_beta = self.alg.replay_buffer.beta_initial + (1.0 - self.alg.replay_buffer.beta_initial) * \
-                                min(1.0, (it - self.current_learning_iteration) / self.alg.replay_buffer.beta_annealing_steps)
-
-
-                    # Iterating over mini-batches for DAE training
-                    for _ in range(dae_num_mini_batches):
-                        # Sample from the Prioritized Replay Buffer
-                        batch_states_raw, batch_actions_raw, batch_next_states_raw, batch_tree_indices, is_weights = \
-                            self.alg.replay_buffer.sample(dae_mini_batch_size, current_beta)
-
-                        # Transfer is_weights to cuda device
-                        is_weights = is_weights.to(self.device)
-
-                        sample_generator = self.alg.replay_buffer.preprocess_samples(
-                            batch_states_raw, batch_actions_raw, batch_next_states_raw,
-                            frames_per_step=self.koopman_cfg["robot"]["frames_per_state"],
-                            prediction_horizon=self.koopman_cfg["robot"]["pred_horizon"]
-                        )
-
-                        all_state_observations = []
-                        all_action_observations = []
-                        all_next_state_observations = []
-                        for sample in sample_generator:
-                            all_state_observations.append(sample["state_observations"].unsqueeze(0))
-                            all_action_observations.append(sample["action_observations"].unsqueeze(0))
-                            all_next_state_observations.append(sample["next_state_observations"].unsqueeze(0))
-
-                        # If preprocess_samples yielded no valid samples (e.g., traj too short), skip this mini-batch
-                        if not all_state_observations:
-                            print("Warning: No valid samples generated by preprocess_samples, skipping DAE mini-batch.")
-                            continue
-
-                        combined_state_observations = torch.cat(all_state_observations, dim=0).to(self.device)
-                        combined_action_observations = torch.cat(all_action_observations, dim=0).to(self.device)
-                        combined_next_state_observations = torch.cat(all_next_state_observations, dim=0).to(self.device)
-
-                        # Normalize the observations and actions
-                        normed_states, normed_actions = self.alg.obs_action_normalizer.normalize(
-                            combined_state_observations, combined_action_observations
-                        )
-                        next_normed_states = self.alg.obs_action_normalizer.normalize(
-                            combined_next_state_observations
-                        )
-
-                        # Move preprocessed and normalized batch to the correct device for the DAE model
-                        batch = self.alg.replay_buffer.shape_states_actions(
-                                normed_states, normed_actions, next_normed_states
-                        )
-
-                        batch_on_device = {k: v.to(self.device) for k, v in batch.items()}
-
-                        # Forward pass through DAE
-                        if hasattr(self.alg.dae_model, 'action_dim') and self.alg.dae_model.action_dim > 0:
-                            outputs = self.alg.dae_model(**batch_on_device)
-                        else:
-                            outputs = self.alg.dae_model(**batch_on_device)
-
-                        # Compute DAE losses
-                        dae_loss_per_sample, dae_metrics = self.alg.dae_model.compute_loss_and_metrics(**outputs, **batch_on_device)
-
-                        # Apply importance sampling weights to the loss
-                        actual_batch_size_for_loss = dae_loss_per_sample.shape[0]
-                        if is_weights.shape[0] != actual_batch_size_for_loss:
-                            is_weights_aligned = is_weights[:actual_batch_size_for_loss]
-                        else:
-                            is_weights_aligned = is_weights
-
-                        weighted_dae_loss = (dae_loss_per_sample * is_weights_aligned).mean()
-
-                        # Backpropagate and update DAE weights
-                        self.alg.dae_optimizer.zero_grad()
-                        weighted_dae_loss.backward()
-                        self.alg.dae_optimizer.step()
-
-                        # Update priorities in the replay buffer
-                        # Use the per-sample losses as errors
-                        dae_errors_for_priority_update = dae_loss_per_sample.detach().cpu().numpy()
-
-                        # Ensure that the batch_tree_indices also aligns with the number of samples that actually generated a loss.
-                        if len(batch_tree_indices) != actual_batch_size_for_loss:
-                            batch_tree_indices_aligned = batch_tree_indices[:actual_batch_size_for_loss]
-                        else:
-                            batch_tree_indices_aligned = batch_tree_indices
-
-                        # Prioritize samples based on the overall DAE loss
-                        self.alg.replay_buffer.update_priorities(
-                            batch_tree_indices_aligned,
-                            dae_errors_for_priority_update
-                        )
-
-                        dae_losses_this_iter.append(weighted_dae_loss.item())
-                        dae_obs_pred_losses_this_iter.append(dae_metrics["obs_pred_loss"].item())
-                        dae_state_rec_losses_this_iter.append(dae_metrics["state_rec_loss"].item())
-                        dae_state_pred_losses_this_iter.append(dae_metrics["state_pred_loss"].item())
-
-                    if dae_losses_this_iter:
-                        mean_dae_loss = sum(dae_losses_this_iter) / len(dae_losses_this_iter)
-                        mean_dae_obs_pred_loss = sum(dae_obs_pred_losses_this_iter) / len(dae_obs_pred_losses_this_iter)
-                        mean_dae_state_rec_loss = sum(dae_state_rec_losses_this_iter) / len(dae_state_rec_losses_this_iter)
-                        mean_dae_state_pred_loss = sum(dae_state_pred_losses_this_iter) / len(dae_state_pred_losses_this_iter)
-                    else:
-                        mean_dae_loss = 0.0 # No batches trained
-                        mean_dae_obs_pred_loss = 0.0
-                        mean_dae_state_rec_loss = 0.0
-                        mean_dae_state_pred_loss = 0.0
-
-                    dae_train_time = time.time() - dae_training_start_time
+                self.alg.compute_returns(obs)
 
             # update policy
             loss_dict = self.alg.update()
+
             stop = time.time()
             learn_time = stop - start
             self.current_learning_iteration = it
             # log info
             if self.log_dir is not None and not self.disable_logs:
                 # Log information
-                locs = locals()
-                locs.update(loss_dict)
-                if "online" in self.task:
-                    locs["mean_dae_loss"] = mean_dae_loss
-                    locs["mean_dae_obs_pred_loss"] = mean_dae_obs_pred_loss
-                    locs["mean_dae_state_rec_loss"] = mean_dae_state_rec_loss
-                    locs["mean_dae_state_pred_loss"] = mean_dae_state_pred_loss
-                    locs["dae_train_time"] = dae_train_time
-                self.log(locs)
+                self.log(locals())
                 # Save model
                 if it % self.save_interval == 0:
-                    self.save(os.path.join(self.log_dir, f"model_{it}.pt"), save_onnx=True)
-                    if "online" in self.task.lower():
-                        torch.save(self.alg.dae_model.state_dict(), os.path.join(self.log_dir, 'dae_model_{}.pt'.format(it)))
+                    self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
 
             # Clear episode infos
             ep_infos.clear()
@@ -552,8 +200,6 @@ class OnPolicyRunner:
         # Save the final model after training
         if self.log_dir is not None and not self.disable_logs:
             self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
-            if "online" in self.task:
-                torch.save(self.alg.dae_model.state_dict(), os.path.join(self.log_dir, 'dae_model_{}.pt'.format(self.current_learning_iteration)))
 
     def log(self, locs: dict, width: int = 80, pad: int = 35):
         # Compute the collection size
@@ -602,17 +248,10 @@ class OnPolicyRunner:
         self.writer.add_scalar("Perf/collection time", locs["collection_time"], locs["it"])
         self.writer.add_scalar("Perf/learning_time", locs["learn_time"], locs["it"])
 
-        if "online" in self.task.lower():
-            self.writer.add_scalar("DAE/loss", locs["mean_dae_loss"], locs["it"]) # or self.current_learning_iteration
-            self.writer.add_scalar("DAE/obs_pred_loss", locs["mean_dae_obs_pred_loss"], locs["it"])
-            self.writer.add_scalar("DAE/state_rec_loss", locs["mean_dae_state_rec_loss"], locs["it"])
-            self.writer.add_scalar("DAE/state_pred_loss", locs["mean_dae_state_pred_loss"], locs["it"])
-            self.writer.add_scalar("DAE/train_time", locs["dae_train_time"], locs["it"])
-
         # -- Training
         if len(locs["rewbuffer"]) > 0:
             # separate logging for intrinsic and extrinsic rewards
-            if self.alg.rnd:
+            if hasattr(self.alg, "rnd") and self.alg.rnd:
                 self.writer.add_scalar("Rnd/mean_extrinsic_reward", statistics.mean(locs["erewbuffer"]), locs["it"])
                 self.writer.add_scalar("Rnd/mean_intrinsic_reward", statistics.mean(locs["irewbuffer"]), locs["it"])
                 self.writer.add_scalar("Rnd/weight", self.alg.rnd.weight, locs["it"])
@@ -639,7 +278,7 @@ class OnPolicyRunner:
             for key, value in locs["loss_dict"].items():
                 log_string += f"""{f'Mean {key} loss:':>{pad}} {value:.4f}\n"""
             # -- Rewards
-            if self.alg.rnd:
+            if hasattr(self.alg, "rnd") and self.alg.rnd:
                 log_string += (
                     f"""{'Mean extrinsic reward:':>{pad}} {statistics.mean(locs['erewbuffer']):.2f}\n"""
                     f"""{'Mean intrinsic reward:':>{pad}} {statistics.mean(locs['irewbuffer']):.2f}\n"""
@@ -674,7 +313,7 @@ class OnPolicyRunner:
         )
         print(log_string)
 
-    def save(self, path: str, infos=None, save_onnx=False):
+    def save(self, path: str, infos=None):
         # -- Save model
         saved_dict = {
             "model_state_dict": self.alg.policy.state_dict(),
@@ -683,69 +322,28 @@ class OnPolicyRunner:
             "infos": infos,
         }
         # -- Save RND model if used
-        if self.alg.rnd:
+        if hasattr(self.alg, "rnd") and self.alg.rnd:
             saved_dict["rnd_state_dict"] = self.alg.rnd.state_dict()
             saved_dict["rnd_optimizer_state_dict"] = self.alg.rnd_optimizer.state_dict()
-        # -- Save observation normalizer if used
-        if self.empirical_normalization:
-            saved_dict["obs_norm_state_dict"] = self.obs_normalizer.state_dict()
-            saved_dict["privileged_obs_norm_state_dict"] = self.privileged_obs_normalizer.state_dict()
-
-        # save model
         torch.save(saved_dict, path)
 
         # upload model to external logging service
         if self.logger_type in ["neptune", "wandb"] and not self.disable_logs:
             self.writer.save_model(path, self.current_learning_iteration)
 
-        if save_onnx:
-            # Save the model in ONNX format
-            # extract the folder path
-            onnx_folder = os.path.dirname(path)
-
-            # extract the iteration number from the path. The path is expected to be in the format
-            # model_{iteration}.pt
-            iteration = int(os.path.basename(path).split("_")[1].split(".")[0])
-            onnx_model_name = f"policy_{iteration}.onnx"
-
-            export_policy_as_onnx(
-                self.alg.policy,
-                normalizer=self.obs_normalizer,
-                path=onnx_folder,
-                filename=onnx_model_name,
-            )
-
-            if self.logger_type in ["neptune", "wandb"]:
-                self.writer.save_model(
-                    os.path.join(onnx_folder, onnx_model_name),
-                    self.current_learning_iteration,
-                )
-
-    def load(self, path: str, load_optimizer: bool = True):
-        loaded_dict = torch.load(path, weights_only=False)
+    def load(self, path: str, load_optimizer: bool = True, map_location: str | None = None):
+        loaded_dict = torch.load(path, weights_only=False, map_location=map_location)
         # -- Load model
         resumed_training = self.alg.policy.load_state_dict(loaded_dict["model_state_dict"])
         # -- Load RND model if used
-        if self.alg.rnd:
+        if hasattr(self.alg, "rnd") and self.alg.rnd:
             self.alg.rnd.load_state_dict(loaded_dict["rnd_state_dict"])
-        # -- Load observation normalizer if used
-        if self.empirical_normalization:
-            if resumed_training:
-                # if a previous training is resumed, the actor/student normalizer is loaded for the actor/student
-                # and the critic/teacher normalizer is loaded for the critic/teacher
-                self.obs_normalizer.load_state_dict(loaded_dict["obs_norm_state_dict"])
-                self.privileged_obs_normalizer.load_state_dict(loaded_dict["privileged_obs_norm_state_dict"])
-            else:
-                # if the training is not resumed but a model is loaded, this run must be distillation training following
-                # an rl training. Thus the actor normalizer is loaded for the teacher model. The student's normalizer
-                # is not loaded, as the observation space could differ from the previous rl training.
-                self.privileged_obs_normalizer.load_state_dict(loaded_dict["obs_norm_state_dict"])
         # -- load optimizer if used
         if load_optimizer and resumed_training:
             # -- algorithm optimizer
             self.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
             # -- RND optimizer if used
-            if self.alg.rnd:
+            if hasattr(self.alg, "rnd") and self.alg.rnd:
                 self.alg.rnd_optimizer.load_state_dict(loaded_dict["rnd_optimizer_state_dict"])
         # -- load current learning iteration
         if resumed_training:
@@ -756,34 +354,21 @@ class OnPolicyRunner:
         self.eval_mode()  # switch to evaluation mode (dropout for example)
         if device is not None:
             self.alg.policy.to(device)
-        policy = self.alg.policy.act_inference
-        if self.cfg["empirical_normalization"]:
-            if device is not None:
-                self.obs_normalizer.to(device)
-            policy = lambda x: self.alg.policy.act_inference(self.obs_normalizer(x))  # noqa: E731
-        return policy
+        return self.alg.policy.act_inference
 
     def train_mode(self):
         # -- PPO
         self.alg.policy.train()
         # -- RND
-        if self.alg.rnd:
+        if hasattr(self.alg, "rnd") and self.alg.rnd:
             self.alg.rnd.train()
-        # -- Normalization
-        if self.empirical_normalization:
-            self.obs_normalizer.train()
-            self.privileged_obs_normalizer.train()
 
     def eval_mode(self):
         # -- PPO
         self.alg.policy.eval()
         # -- RND
-        if self.alg.rnd:
+        if hasattr(self.alg, "rnd") and self.alg.rnd:
             self.alg.rnd.eval()
-        # -- Normalization
-        if self.empirical_normalization:
-            self.obs_normalizer.eval()
-            self.privileged_obs_normalizer.eval()
 
     def add_git_repo_to_log(self, repo_file_path):
         self.git_status_repos.append(repo_file_path)
@@ -835,3 +420,68 @@ class OnPolicyRunner:
         torch.distributed.init_process_group(backend="nccl", rank=self.gpu_global_rank, world_size=self.gpu_world_size)
         # set device to the local rank
         torch.cuda.set_device(self.gpu_local_rank)
+
+    def _construct_algorithm(self, obs) -> PPO:
+        """Construct the actor-critic algorithm."""
+        # resolve RND config
+        self.alg_cfg = resolve_rnd_config(self.alg_cfg, obs, self.cfg["obs_groups"], self.env)
+
+        # resolve symmetry config
+        self.alg_cfg = resolve_symmetry_config(self.alg_cfg, self.env)
+
+        # resolve deprecated normalization config
+        if self.cfg.get("empirical_normalization") is not None:
+            warnings.warn(
+                "The `empirical_normalization` parameter is deprecated. Please set `actor_obs_normalization` and "
+                "`critic_obs_normalization` as part of the `policy` configuration instead.",
+                DeprecationWarning,
+            )
+            if self.policy_cfg.get("actor_obs_normalization") is None:
+                self.policy_cfg["actor_obs_normalization"] = self.cfg["empirical_normalization"]
+            if self.policy_cfg.get("critic_obs_normalization") is None:
+                self.policy_cfg["critic_obs_normalization"] = self.cfg["empirical_normalization"]
+
+        # initialize the actor-critic
+        actor_critic_class = eval(self.policy_cfg.pop("class_name"))
+        actor_critic: ActorCritic | ActorCriticRecurrent = actor_critic_class(
+            obs, self.cfg["obs_groups"], self.env.num_actions, **self.policy_cfg
+        ).to(self.device)
+
+        # initialize the algorithm
+        alg_class = eval(self.alg_cfg.pop("class_name"))
+        alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg, multi_gpu_cfg=self.multi_gpu_cfg)
+
+        # initialize the storage
+        alg.init_storage(
+            "rl",
+            self.env.num_envs,
+            self.num_steps_per_env,
+            obs,
+            [self.env.num_actions],
+        )
+
+        return alg
+
+    def _prepare_logging_writer(self):
+        """Prepares the logging writers."""
+        if self.log_dir is not None and self.writer is None and not self.disable_logs:
+            # Launch either Tensorboard or Neptune & Tensorboard summary writer(s), default: Tensorboard.
+            self.logger_type = self.cfg.get("logger", "tensorboard")
+            self.logger_type = self.logger_type.lower()
+
+            if self.logger_type == "neptune":
+                from rsl_rl.utils.neptune_utils import NeptuneSummaryWriter
+
+                self.writer = NeptuneSummaryWriter(log_dir=self.log_dir, flush_secs=10, cfg=self.cfg)
+                self.writer.log_config(self.env.cfg, self.cfg, self.alg_cfg, self.policy_cfg)
+            elif self.logger_type == "wandb":
+                from rsl_rl.utils.wandb_utils import WandbSummaryWriter
+
+                self.writer = WandbSummaryWriter(log_dir=self.log_dir, flush_secs=10, cfg=self.cfg)
+                self.writer.log_config(self.env.cfg, self.cfg, self.alg_cfg, self.policy_cfg)
+            elif self.logger_type == "tensorboard":
+                from torch.utils.tensorboard import SummaryWriter
+
+                self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+            else:
+                raise ValueError("Logger type not found. Please choose 'neptune', 'wandb' or 'tensorboard'.")
