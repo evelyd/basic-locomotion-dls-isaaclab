@@ -754,7 +754,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     noise_scale_ang_range = [1.0, 1.0]
     noise_scale_gravity = 0.05
 
-    default_gait_freq = 1.4
+    default_gait_freq = 0.67 #1.4
     kappa_gait_probs = 0.07
     measure_heights = False
 
@@ -836,14 +836,14 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
 
     commands: MyCommandsCfg = MyCommandsCfg(
         ranges={
-            # "lin_vel_x": [-0.3, 0.3],
-            # "lin_vel_y": [-0.0, 0.0],
-            # "ang_vel_z": [-0.3, 0.3],
-            "lin_vel_x": [-0.0, 0.0],
+            "lin_vel_x": [-0.3, 0.3],
             "lin_vel_y": [-0.0, 0.0],
-            "ang_vel_z": [-0.0, 0.0],
-            # "heading": [-0.5 * np.pi, 0.5 * np.pi],
-            "heading": [0.0, 0.0],
+            "ang_vel_z": [-0.3, 0.3],
+            # "lin_vel_x": [-0.0, 0.0],
+            # "lin_vel_y": [-0.0, 0.0],
+            # "ang_vel_z": [-0.0, 0.0],
+            "heading": [-0.5 * np.pi, 0.5 * np.pi],
+            # "heading": [0.0, 0.0],
         }
     )
 
@@ -863,7 +863,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     # Stand dance specific
     reward_tracking_liftup_sigma = 0.03
     reward_liftup_target = reward_base_height_target
-    reward_lift_up_threshold = [0.18, reward_base_height_target]
+    reward_lift_up_threshold = [0.35, reward_base_height_target]
     reward_tracking_sigma = 0.05
     reward_scale_factor_low = 0.25
     reward_scale_factor_high = 0.35
@@ -879,32 +879,32 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     action_q_diff_wt = -0.5 * 2 if INIT_POSE == "sit" else 0.
     rewards: MyRewardsCfg = MyRewardsCfg(
         scales={
-            "feet_slip": feet_slip_wt,
-            "feet_clearance_cmd_linear": -300,
+            # "feet_slip": feet_slip_wt,
+            # "feet_clearance_cmd_linear": -300,
             "collision": -2.0e2,
             "torque_limits": -0.01,
             "tracking_lin_vel": 0.8 * 5,
             "tracking_ang_vel": 0.5 * 5,
-            "rear_air": -0.5,
+            # "rear_air": -0.5,
             "action_rate": -0.07e1,
             "action_q_diff": action_q_diff_wt,
-            "stand_air": -50 * 0,
+            # "stand_air": -50 * 0,
             "dof_vel": -2e-3,
             "dof_acc": -1e-5,
             "dof_pos_limits": -10,
             "upright": 2.2e2,
-            "lift_up_linear": 0.8e2,
-            "time_upright": 700, # new
-            "foot_twist": -0,
-            "foot_shift": -50,
+            # "lift_up_linear": 0.8e2,
+            # "time_upright": 700, # new
+            # "foot_twist": -0,
+            # "foot_shift": -50,
             # "termination": -50.0,
             "lin_vel_z": -2.0e5,
             "ang_vel_xy": -0.05e4,
-            "orientation": -0.,
+            # "orientation": -0.,
             "torques": -0.00001,
             "base_height": -0.,
-            "feet_air_time":  1.0,
-            "stumble": -0.0,
+            # "feet_air_time":  1.0,
+            # "stumble": -0.0,
             # "front_feet_air_time": 500,
         }
     )

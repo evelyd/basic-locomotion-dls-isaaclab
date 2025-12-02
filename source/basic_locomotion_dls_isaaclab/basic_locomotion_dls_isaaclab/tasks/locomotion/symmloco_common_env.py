@@ -657,7 +657,6 @@ class SymmlocoCommonEnv(DirectRLEnv):
 
     def _reward_base_height(self):
         # Penalize base height away from target
-        # base_height = torch.mean(self._robot.data.root_pos_w[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
         base_height = torch.mean(self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2], dim=1)
         return torch.square(base_height - self.cfg.reward_base_height_target)
 
@@ -811,10 +810,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
     def _reward_upright(self):
         forward = math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)
         reward_upright_vec = torch.tensor(self.cfg.reward_upright_vec, device=self.device).unsqueeze(0).expand(self.num_envs, -1)
-        upright_vec = math_utils.quat_apply_yaw(self._robot.data.root_quat_w, reward_upright_vec)
-        cosine_dist = torch.sum(forward * upright_vec, dim=-1) / torch.norm(upright_vec, dim=-1)
-        # dot product with [0, 0, 1]
-        # cosine_dist = forward[:, 2]
+        cosine_dist = torch.sum(forward * reward_upright_vec, dim=-1) / torch.norm(reward_upright_vec, dim=-1)
         reward = torch.square(0.5 * cosine_dist + 0.5)
         return reward
 

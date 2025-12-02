@@ -196,7 +196,8 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
             return
 
         # Calculate the split point
-        half_point = num_resets // 2
+        # half_point = num_resets // 2
+        half_point = 0 # set all to default pose
 
         default_root_state = self._robot.data.default_root_state[env_ids]
         default_root_state[:, :3] += self._terrain.env_origins[env_ids]
@@ -248,7 +249,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         extras["Episode_Termination/stand_air_termination"] = torch.count_nonzero(self.stand_air_buf[env_ids]).item()
         extras["Episode_Termination/abrupt_change_termination"] = torch.count_nonzero(self.abrupt_change_buf[env_ids]).item()
 
-        # self.extras["log"].update(extras)
+        self.extras["log"].update(extras)
 
         heading = self._get_cur_heading()
         self.last_heading[env_ids] = heading[env_ids]
