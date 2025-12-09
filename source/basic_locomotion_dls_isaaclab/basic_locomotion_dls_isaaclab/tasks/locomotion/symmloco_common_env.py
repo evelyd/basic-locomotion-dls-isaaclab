@@ -626,8 +626,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
 
         forward = math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)
         reward_upright_vec = torch.tensor(self.cfg.reward_upright_vec, device=self.device).unsqueeze(0).expand(self.num_envs, -1)
-        upright_vec = custom_utils.quat_apply_yaw(self._robot.data.root_quat_w, reward_upright_vec)
-        is_stand = (torch.sum(forward * upright_vec, dim=-1) / torch.norm(upright_vec, dim=-1)) > 0.9
+        is_stand = (torch.sum(forward * reward_upright_vec, dim=-1) / torch.norm(reward_upright_vec, dim=-1)) > 0.9
 
         # is_in_collision = torch.any(torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 0.1, dim=1)
         # base_in_collision = torch.norm(self.contact_forces[:, self.base_contact_indice, :], dim=-1) > 0.1
@@ -641,8 +640,7 @@ class SymmlocoCommonEnv(DirectRLEnv):
 
         forward = math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)
         reward_upright_vec = torch.tensor(self.cfg.reward_upright_vec, device=self.device).unsqueeze(0).expand(self.num_envs, -1)
-        upright_vec = custom_utils.quat_apply_yaw(self._robot.data.root_quat_w, reward_upright_vec)
-        is_stand = (torch.sum(forward * upright_vec, dim=-1) / torch.norm(upright_vec, dim=-1)) > 0.9
+        is_stand = (torch.sum(forward * reward_upright_vec, dim=-1) / torch.norm(reward_upright_vec, dim=-1)) > 0.9
 
         # is_in_collision = torch.any(torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 0.1, dim=1)
         base_in_collision = torch.any(torch.norm(self._contact_sensor.data.net_forces_w[:, self._base_id, :], dim=-1) > 0.1, dim=-1).float()
