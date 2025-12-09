@@ -176,8 +176,8 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
             self._command_ranges["lin_vel_y"][1] = torch.clip(self._command_ranges["lin_vel_y"][1] + 0.2, 0., self.cfg.command_max_curriculum)
 
         if normalized_ang_vel_reward > 0.8:
-            self._command_ranges["ang_vel_yaw"][0] = torch.clip(self._command_ranges["ang_vel_yaw"][0] - 0.2, -self.cfg.commands.max_curriculum, 0.)
-            self._command_ranges["ang_vel_yaw"][1] = torch.clip(self._command_ranges["ang_vel_yaw"][1] + 0.2, 0., self.cfg.commands.max_curriculum)
+            self._command_ranges["ang_vel_z"][0] = torch.clip(self._command_ranges["ang_vel_z"][0] - 0.2, -self.cfg.commands.max_curriculum, 0.)
+            self._command_ranges["ang_vel_z"][1] = torch.clip(self._command_ranges["ang_vel_z"][1] + 0.2, 0., self.cfg.commands.max_curriculum)
 
     def _resample_commands(self, env_ids):
         super()._resample_commands(env_ids)
