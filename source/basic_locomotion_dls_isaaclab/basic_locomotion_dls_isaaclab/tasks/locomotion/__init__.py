@@ -64,6 +64,16 @@ gym.register(
 )
 
 gym.register(
+    id="Stand-Locomotion-Go2-Flat",
+    entry_point=LocomotionEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": Go2FlatEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:FlatPPORunnerCfg",
+    },
+)
+
+gym.register(
     id="Locomotion-Go2-Rough-Blind",
     entry_point=LocomotionEnv,
     disable_env_checker=True,
