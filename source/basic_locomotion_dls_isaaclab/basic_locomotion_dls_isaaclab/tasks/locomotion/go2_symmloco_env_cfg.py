@@ -870,6 +870,8 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     reward_ang_rew_mode = "heading"
     reward_tracking_ang_sigma = 0.2
     reward_foot_target = 0.05
+    reward_tracking_lin_z_sigma = 0.1
+    reward_tracking_ang_y_sigma = 0.1
 
     @configclass
     class MyRewardsCfg:
@@ -906,6 +908,8 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
             # "feet_air_time":  1.0,
             # "stumble": -0.0,
             # "front_feet_air_time": 500,
+            "support_polygon": 100,
+            "upright_balance": 50,
         }
     )
 

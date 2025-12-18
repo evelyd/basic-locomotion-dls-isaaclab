@@ -167,6 +167,8 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         normalized_lin_vel_reward = avg_tracking_lin_vel / self.cfg.rewards.scales["tracking_lin_vel"]
         normalized_ang_vel_reward = avg_tracking_ang_vel / self.cfg.rewards.scales["tracking_ang_vel"]
 
+        print(f"Avg normalized lin vel reward: {normalized_lin_vel_reward:.3f}, ang vel reward: {normalized_ang_vel_reward:.3f}")
+
         if normalized_lin_vel_reward > 0.8:
             # self.command_ranges["lin_vel_x"][0] = 0. # no backward vel
             self._command_ranges["lin_vel_x"][0] = torch.clip(self._command_ranges["lin_vel_x"][0] - 0.2, -self.cfg.command_max_curriculum, 0.)
@@ -483,3 +485,20 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         condition = self.episode_length_buf < self.cfg.reward_allow_contact_steps
         reward = movement * condition.float()
         return reward
+
+    def _reward_support_polygon(self):
+        delta_x_b = self._robot.data.root_pos_w[:, 0] - torch.mean(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, 0], dim=1)
+        delta_z_b = self._robot.data.root_pos_w[:, 1] - torch.mean(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, 1], dim=1)
+        atan = torch.atan2(delta_x_b, delta_z_b)
+        support_polygon = - torch.square(torch.abs(self._commands[:, 0])) * torch.square((torch.pi/2) - torch.abs(atan))
+        reward = torch.where(atan * self._commands[:, 0] < 0.0, support_polygon, torch.zeros_like(support_polygon))
+        return reward
+
+    def _reward_upright_balance(self):
+        reward = torch.exp(-torch.square(self._commands[:,2]) / self.cfg.reward_tracking_lin_z_sigma) + torch.exp(-torch.square(self._robot.data.root_ang_vel_b[:, 1]) / self.cfg.reward_tracking_ang_y_sigma)
+
+        forward = math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)
+        reward_upright_vec = torch.tensor(self.cfg.reward_upright_vec, device=self.device).unsqueeze(0).expand(self.num_envs, -1)
+        is_stand = (torch.sum(forward * reward_upright_vec, dim=-1) / torch.norm(reward_upright_vec, dim=-1)) > 0.9
+
+        return reward * is_stand.float()
