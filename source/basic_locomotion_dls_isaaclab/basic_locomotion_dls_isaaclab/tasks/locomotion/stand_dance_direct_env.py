@@ -355,7 +355,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
     #------------ reward functions----------------
     def _reward_lift_up(self):
         root_height = self._robot.data.root_pos_w[:, 2]
-        root_height -= torch.mean(self._get_heights_at_points(self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], :2]), dim = 1)
+        root_height -= torch.mean(self._get_heights_at_points(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, :2]), dim = 1)
         delta_height = root_height - self.cfg.reward_liftup_target
         error = torch.square(delta_height)
         reward = torch.exp(- error / self.cfg.reward_tracking_liftup_sigma) #use tracking sigma
@@ -363,7 +363,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
 
     def _reward_lift_up_linear(self):
         root_height = self._robot.data.root_pos_w[:, 2]
-        root_height -= torch.mean(self._get_heights_at_points(self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], :2]), dim = 1)
+        root_height -= torch.mean(self._get_heights_at_points(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, :2]), dim = 1)
         reward = (root_height - self.cfg.reward_lift_up_threshold[0]) / (self.cfg.reward_lift_up_threshold[1] - self.cfg.reward_lift_up_threshold[0])
         reward = torch.clamp(reward, 0., 1.)
         return reward
@@ -381,7 +381,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         scale_factor_low = self.cfg.reward_scale_factor_low
         scale_factor_high = self.cfg.reward_scale_factor_high
         scaling_factor = (torch.clip(
-            self._robot.data.root_pos_w[:, 2] - torch.mean(self._get_heights_at_points(self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], :2]), dim = 1), min=scale_factor_low, max=scale_factor_high
+            self._robot.data.root_pos_w[:, 2] - torch.mean(self._get_heights_at_points(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, :2]), dim = 1), min=scale_factor_low, max=scale_factor_high
         ) - scale_factor_low) / (scale_factor_high - scale_factor_low)
         reward = reward * is_stand.float() * scaling_factor
         return reward
@@ -412,15 +412,15 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         scale_factor_low = self.cfg.reward_scale_factor_low
         scale_factor_high = self.cfg.reward_scale_factor_high
         scaling_factor = (torch.clip(
-            self._robot.data.root_pos_w[:, 2] - torch.mean(self._get_heights_at_points(self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], :2]), dim=1), min=scale_factor_low, max=scale_factor_high
+            self._robot.data.root_pos_w[:, 2] - torch.mean(self._get_heights_at_points(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, :2]), dim=1), min=scale_factor_low, max=scale_factor_high
         ) - scale_factor_low) / (scale_factor_high - scale_factor_low)
         reward = reward * is_stand.float() * scaling_factor
         return reward
 
     def _reward_feet_clearance_cmd_linear(self):
         phases = 1 - torch.abs(1.0 - torch.clip((self.foot_indices[:, -2:] * 2.0) - 1.0, 0.0, 1.0) * 2.0)
-        foot_height = (self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], 2])
-        terrain_at_foot_height = self._get_heights_at_points(self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], :2])
+        foot_height = (self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, 2])
+        terrain_at_foot_height = self._get_heights_at_points(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, :2])
         target_height = self.cfg.reward_foot_target * phases + terrain_at_foot_height + 0.02
         rew_foot_clearance = torch.square(target_height - foot_height) * (1 - self._desired_contact_states[:, -2:])
         condition = self.episode_length_buf > self.cfg.reward_allow_contact_steps
@@ -439,7 +439,7 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
             torch.logical_and(
                 self.episode_length_buf < self.cfg.reward_allow_contact_steps,
                 math_utils.quat_apply(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B)[..., 2] < 0.9
-            ), torch.any((self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], 2] - self._get_heights_at_points(self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], :2])) > self.init_feet_positions[:, -2:, 2] + 0.03, dim=1)
+            ), torch.any((self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, 2] - self._get_heights_at_points(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, :2])) > self.init_feet_positions[:, -2:, 2] + 0.03, dim=1)
         )
         return stand_air_condition.float()
 
@@ -462,12 +462,12 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
     def _reward_foot_shift(self):
         desired_foot_positions = torch.clone(self.init_feet_positions[:, 2:])
         desired_foot_positions[:, :, 2] = 0.02
-        desired_foot_positions[:, :, 2] += self._get_heights_at_points(self._robot.data.body_pos_w[:, self._feet_ids_robot[-2:], :2])
-        rear_foot_shift = torch.norm(self._robot.data.body_pos_w[:, self._feet_ids_robot[2:]] - desired_foot_positions, dim=-1).mean(dim=1)
+        desired_foot_positions[:, :, 2] += self._get_heights_at_points(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, :2])
+        rear_foot_shift = torch.norm(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot] - desired_foot_positions, dim=-1).mean(dim=1)
         init_foot_positions = torch.clone(self.init_feet_positions[:, :2])
         front_foot_shift = torch.norm( torch.stack([
-            (init_foot_positions[:, :, 0] - self._robot.data.body_pos_w[:, self._feet_ids_robot[:2], 0]).clamp(min=0),
-            torch.abs(init_foot_positions[:, :, 1] - self._robot.data.body_pos_w[:, self._feet_ids_robot[:2], 1])
+            (init_foot_positions[:, :, 0] - self._robot.data.body_pos_w[:, self._front_feet_ids_robot, 0]).clamp(min=0),
+            torch.abs(init_foot_positions[:, :, 1] - self._robot.data.body_pos_w[:, self._front_feet_ids_robot, 1])
         ], dim=-1), dim=-1).mean(dim=1)
         condition = self.episode_length_buf < self.cfg.reward_allow_contact_steps
         reward = (front_foot_shift + rear_foot_shift) * condition.float()

@@ -78,6 +78,8 @@ class SymmlocoCommonEnv(DirectRLEnv):
         self._allow_initial_contact_ids, _ = self._contact_sensor.find_bodies(self.cfg.allow_initial_contacts_on)
 
         self._feet_ids_robot, _ = self._robot.find_bodies(".*foot")
+        self._rear_feet_ids_robot, _ = self._robot.find_bodies("R.*foot")
+        self._front_feet_ids_robot, _ = self._robot.find_bodies("F.*foot")
         self._hip_ids_robot, _ = self._robot.find_bodies(".*hip")
 
         self._feet_air_time = torch.zeros(self.num_envs, len(self._feet_ids), dtype=torch.float, device=self.device, requires_grad=False)
