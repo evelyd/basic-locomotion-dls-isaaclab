@@ -895,7 +895,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
             "dof_acc": -1e-5,
             "dof_pos_limits": -10,
             "upright": 1.e2, #2.2e2,
-            # "lift_up_linear": 0.8e2,
+            "lift_up_linear": 0.8e2,
             # "time_upright": 700, # new
             # "foot_twist": -0,
             # "foot_shift": -50,
@@ -904,7 +904,7 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
             # "ang_vel_xy": -0.05e4,
             # "orientation": -0.,
             "torques": -0.00001,
-            "base_height": -0.,
+            "base_height": -10.,
             # "feet_air_time":  1.0,
             # "stumble": -0.0,
             # "front_feet_air_time": 500,
