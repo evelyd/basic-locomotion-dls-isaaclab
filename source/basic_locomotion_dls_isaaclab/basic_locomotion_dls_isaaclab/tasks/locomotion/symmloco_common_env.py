@@ -85,7 +85,10 @@ class SymmlocoCommonEnv(DirectRLEnv):
         self._feet_air_time = torch.zeros(self.num_envs, len(self._feet_ids), dtype=torch.float, device=self.device, requires_grad=False)
 
         # Setup for command curriculum
-        self._command_ranges = self.cfg.commands.ranges
+        self._command_ranges = {
+            key: [torch.tensor(val[0], device=self.device), torch.tensor(val[1], device=self.device)]
+            for key, val in self.cfg.commands.ranges.items()
+        }
 
         self._reward_scales = self.cfg.rewards.scales
         # Setup for reward curriculum
@@ -423,9 +426,6 @@ class SymmlocoCommonEnv(DirectRLEnv):
             extras["Episode_Reward/" + key] = episodic_sum_avg / self.max_episode_length_s
             self._episode_sums[key][env_ids] = 0.0
         self.extras["log"] = dict()
-        self.extras["log"].update(extras)
-        extras = dict()
-        # extras["Episode_Termination/base_contact"] = torch.count_nonzero(self.reset_terminated[env_ids]).item()
         extras["Episode_Termination/time_out"] = torch.count_nonzero(self.reset_time_outs[env_ids]).item()
 
         if(self._terrain.cfg.terrain_generator is not None and self._terrain.cfg.terrain_generator.curriculum == True):
@@ -436,6 +436,13 @@ class SymmlocoCommonEnv(DirectRLEnv):
         # Update command curriculum after extras is populated
         if self.cfg.command_curriculum and (self.common_step_counter % self.max_episode_length==0):
             self._update_command_curriculum(env_ids, self.extras)
+
+        # Log the curriculum levels over time
+        extras["Episode_Curriculum/lin_vel_x"] = self._command_ranges["lin_vel_x"][1].item()
+        extras["Episode_Curriculum/lin_vel_y"] = self._command_ranges["lin_vel_y"][1].item()
+        extras["Episode_Curriculum/ang_vel_z"] = self._command_ranges["ang_vel_z"][1].item()
+
+        self.extras["log"].update(extras)
 
     def _update_command_curriculum(self, extras: dict):
         """Updates the command ranges based on episode performance."""
