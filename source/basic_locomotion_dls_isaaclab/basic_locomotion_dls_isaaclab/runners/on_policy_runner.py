@@ -166,6 +166,7 @@ class OnPolicyRunner:
                 # Save model
                 if it % self.save_interval == 0:
                     self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
+                    self.save_state_est_model(os.path.join(self.log_dir, f"state_est_model_{it}.pth"))
 
             # Clear episode infos
             ep_infos.clear()
@@ -200,6 +201,7 @@ class OnPolicyRunner:
         # Save the final model after training
         if self.log_dir is not None and not self.disable_logs:
             self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
+            self.save_state_est_model(os.path.join(self.log_dir, f"state_est_model_{self.current_learning_iteration}.pt"))
 
     def log(self, locs: dict, width: int = 80, pad: int = 35):
         # Compute the collection size
@@ -331,24 +333,14 @@ class OnPolicyRunner:
         if self.logger_type in ["neptune", "wandb"] and not self.disable_logs:
             self.writer.save_model(path, self.current_learning_iteration)
 
-    def load(self, path: str, load_optimizer: bool = True, map_location: str | None = None):
-        loaded_dict = torch.load(path, weights_only=False, map_location=map_location)
-        # -- Load model
-        resumed_training = self.alg.policy.load_state_dict(loaded_dict["model_state_dict"])
-        # -- Load RND model if used
-        if hasattr(self.alg, "rnd") and self.alg.rnd:
-            self.alg.rnd.load_state_dict(loaded_dict["rnd_state_dict"])
-        # -- load optimizer if used
-        if load_optimizer and resumed_training:
-            # -- algorithm optimizer
-            self.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
-            # -- RND optimizer if used
-            if hasattr(self.alg, "rnd") and self.alg.rnd:
-                self.alg.rnd_optimizer.load_state_dict(loaded_dict["rnd_optimizer_state_dict"])
-        # -- load current learning iteration
-        if resumed_training:
-            self.current_learning_iteration = loaded_dict["iter"]
-        return loaded_dict["infos"]
+    def save_state_est_model(self, path: str, infos=None):
+        # -- Save state estimation model
+        state_est_model = self.env.unwrapped.get_state_est_model()
+        state_est_model.save_network(path, device=self.device)
+
+        # upload model to external logging service
+        if self.logger_type in ["neptune", "wandb"] and not self.disable_logs:
+            self.writer.save_model(path, self.current_learning_iteration)
 
     def get_inference_policy(self, device=None):
         self.eval_mode()  # switch to evaluation mode (dropout for example)

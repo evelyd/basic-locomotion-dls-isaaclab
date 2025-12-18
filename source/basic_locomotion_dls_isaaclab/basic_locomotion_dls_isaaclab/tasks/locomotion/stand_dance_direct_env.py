@@ -346,11 +346,11 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
             self._cuncurrent_state_est_network.train_network(batch_size=self.cfg.cuncurrent_state_est_batch_size,
                                                             epochs=self.cfg.cuncurrent_state_est_train_epochs,
                                                             learning_rate=self.cfg.cuncurrent_state_est_lr, device=self.device)
-        if num_episode_from_start == num_final_episode_from_start - 10:
-            # Save the network
-            self._cuncurrent_state_est_network.save_network(f"cuncurrent_state_estimator_{self.cfg.run_setting_detail}_final.pth", self.device)
 
         return linear_velocity_b
+
+    def get_state_est_model(self):
+        return self._cuncurrent_state_est_network
 
     #------------ reward functions----------------
     def _reward_lift_up(self):
