@@ -1,5 +1,5 @@
-import rclpy 
-from rclpy.node import Node 
+import rclpy
+from rclpy.node import Node
 from dls2_interface.msg import BaseState, BlindState, Imu, TrajectoryGenerator, FeetContactState
 
 import time
@@ -14,7 +14,7 @@ from gym_quadruped.utils.quadruped_utils import LegsAttr
 # Config imports
 import config as cfg
 
-import os 
+import os
 dir_path = os.path.dirname(os.path.realpath(__file__))
 # Set the priority of the process
 pid = os.getpid()
@@ -27,6 +27,7 @@ os.system("echo -20 > /proc/" + str(pid) + "/autogroup")
 USE_SCHEDULER = True # Use the scheduler to compute the control signal
 SCHEDULER_FREQ = 500 # Frequency of the scheduler
 RENDER_FREQ = 30
+MAX_TORQUE = 23.7
 
 # Shell for the controllers ----------------------------------------------
 class Simulator_Node(Node):
@@ -57,14 +58,14 @@ class Simulator_Node(Node):
             base_vel_command_type="human"
         )
         self.env.reset(random=False)
-        
+
 
         self.last_render_time = time.time()
-        self.env.render()  
+        self.env.render()
         self.env.viewer.user_scn.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = False
         self.env.viewer.user_scn.flags[mujoco.mjtRndFlag.mjRND_REFLECTION] = False
 
-        # Desired PD 
+        # Desired PD
         self.desired_joints_position = LegsAttr(*[np.zeros((int(self.env.mjModel.nu/4), 1)) for _ in range(4)])
         self.desired_joints_velocity = LegsAttr(*[np.zeros((int(self.env.mjModel.nu/4), 1)) for _ in range(4)])
 
@@ -84,7 +85,7 @@ class Simulator_Node(Node):
 
         self.Kp = np.array(msg.kp)[0]
         self.Kd = np.array(msg.kd)[0]
-        
+
 
     def compute_simulator_step_callback(self):
 
@@ -142,10 +143,19 @@ class Simulator_Node(Node):
 
 
         action = np.zeros(self.env.mjModel.nu)
-        action[self.env.legs_tau_idx.FL] = self.Kp*(self.desired_joints_position.FL.reshape(-1) - joints_pos.FL) - self.Kd*(joints_vel.FL)
-        action[self.env.legs_tau_idx.FR] = self.Kp*(self.desired_joints_position.FR.reshape(-1) - joints_pos.FR) - self.Kd*(joints_vel.FR)
-        action[self.env.legs_tau_idx.RL] = self.Kp*(self.desired_joints_position.RL.reshape(-1) - joints_pos.RL) - self.Kd*(joints_vel.RL)
-        action[self.env.legs_tau_idx.RR] = self.Kp*(self.desired_joints_position.RR.reshape(-1) - joints_pos.RR) - self.Kd*(joints_vel.RR)
+        # Calculate Torques
+        tau_FL = self.Kp*(self.desired_joints_position.FL.reshape(-1) - joints_pos.FL) - self.Kd*(joints_vel.FL)
+        tau_FR = self.Kp*(self.desired_joints_position.FR.reshape(-1) - joints_pos.FR) - self.Kd*(joints_vel.FR)
+        tau_RL = self.Kp*(self.desired_joints_position.RL.reshape(-1) - joints_pos.RL) - self.Kd*(joints_vel.RL)
+        tau_RR = self.Kp*(self.desired_joints_position.RR.reshape(-1) - joints_pos.RR) - self.Kd*(joints_vel.RR)
+
+        # --- FIX: CLIP TORQUES ---
+        action[self.env.legs_tau_idx.FL] = np.clip(tau_FL, -MAX_TORQUE, MAX_TORQUE)
+        action[self.env.legs_tau_idx.FR] = np.clip(tau_FR, -MAX_TORQUE, MAX_TORQUE)
+        action[self.env.legs_tau_idx.RL] = np.clip(tau_RL, -MAX_TORQUE, MAX_TORQUE)
+        action[self.env.legs_tau_idx.RR] = np.clip(tau_RR, -MAX_TORQUE, MAX_TORQUE)
+
+
         self.env.step(action=action)
 
 

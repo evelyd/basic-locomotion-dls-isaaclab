@@ -1,11 +1,11 @@
 import sys
-import os 
+import os
 dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path+"/../")
 sys.path.append(dir_path+"/../scripts/rsl_rl")
 
-robot = 'aliengo'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'mini_cheetah' 
-scene = 'random_boxes'  # flat, random_boxes, random_pyramids, perlin
+robot = 'go2'  # 'aliengo', 'go1', 'go2', 'b2', 'hyqreal1', 'hyqreal2', 'mini_cheetah'
+scene = 'flat'  # flat, random_boxes, random_pyramids, perlin
 
 # ----------------------------------------------------------------------------------------------------------------
 if(robot == "aliengo"):
@@ -45,6 +45,6 @@ cuncurrent_state_est_network = policy_folder_path + "/exported/cuncurrent_state_
 rma_network = policy_folder_path + "/exported/rma.pth"
 
 # Load specific training parameters
-import yaml 
+import yaml
 with open(policy_folder_path + "/params/env.yaml", "r") as file:
     training_env = yaml.unsafe_load(file)
