@@ -44,21 +44,21 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
 
         # Choosing the main source of observation
         if(self.cfg.use_cuncurrent_state_est):
-            # If Cuncurrent SE/Learned State Estimator, we predict linear and angular vel from IMU
-            velocity_b = self._get_cuncurrent_state_estimation()
-            angular_velocity_b = self._imu.data.ang_vel_b
+        #     # If Cuncurrent SE/Learned State Estimator, we predict linear and angular vel from IMU
+        #     velocity_b = self._get_cuncurrent_state_estimation()
+        #     angular_velocity_b = self._imu.data.ang_vel_b
             projected_gravity_b = self._imu.data.projected_gravity_b
         else:
-            velocity_b = self._robot.data.root_lin_vel_b
-            angular_velocity_b = self._robot.data.root_ang_vel_b
+        #     velocity_b = self._robot.data.root_lin_vel_b
+        #     angular_velocity_b = self._robot.data.root_ang_vel_b
             projected_gravity_b = self._robot.data.projected_gravity_b
 
         obs = torch.cat(
             [
                 tensor
                 for tensor in (
-                    velocity_b * self.cfg.obs_scale_lin_vel,
-                    angular_velocity_b * self.cfg.obs_scale_ang_vel,
+                    # velocity_b * self.cfg.obs_scale_lin_vel,
+                    # angular_velocity_b * self.cfg.obs_scale_ang_vel,
                     projected_gravity_b,
                     math_utils.quat_apply_inverse(self._robot.data.root_quat_w, self._robot.data.FORWARD_VEC_B),
                     self._commands[:, :3] * self.command_scale,
@@ -97,9 +97,9 @@ class AliengoStandDanceEnv(SymmlocoCommonEnv):
         self.add_noise = self.cfg.add_noise
         noise_level = self.cfg.noise_level
         start_index = 0
-        noise_vec[start_index:start_index + 3] = self.cfg.noise_scale_gravity * noise_level # base lin vel
-        noise_vec[start_index + 3: start_index + 6] = self.cfg.noise_scale_gravity * noise_level # base ang vel
-        start_index += 6
+        # noise_vec[start_index:start_index + 3] = self.cfg.noise_scale_gravity * noise_level # base lin vel
+        # noise_vec[start_index + 3: start_index + 6] = self.cfg.noise_scale_gravity * noise_level # base ang vel
+        # start_index += 6
         noise_vec[start_index:start_index + 3] = self.cfg.noise_scale_gravity * noise_level
         noise_vec[start_index + 3: start_index + 6] = self.cfg.noise_scale_gravity * noise_level
         start_index += 6

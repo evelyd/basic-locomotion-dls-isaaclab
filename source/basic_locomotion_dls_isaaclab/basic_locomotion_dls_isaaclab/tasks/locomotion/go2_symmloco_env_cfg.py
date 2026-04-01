@@ -712,9 +712,9 @@ class Go2StandDanceDirectEnvCfg(DirectRLEnvCfg):
     use_filter_actions = True
 
     # total of
-    observation_space = 3 # base lin vel
-    observation_space += 3 # base ang vel
-    observation_space += 3 # projected gravity
+    # observation_space = 3 # base lin vel
+    # observation_space += 3 # base ang vel
+    observation_space = 3 # projected gravity
     observation_space += 3 # projected_forward_vec
     observation_space += 3 # velocity commands
     observation_space += 12 # joint pos
