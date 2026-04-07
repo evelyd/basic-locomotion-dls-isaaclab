@@ -204,6 +204,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
+
+    if args_cli.video:
+        import wandb
+        if wandb.run is not None:
+            print("[INFO] Syncing local videos to Weights & Biases.")
+            # Tell W&B to upload any .mp4 files in the video directory as they are created
+            input(f"saving videos to wnandb")
+            wandb.save(os.path.join(log_dir, "videos", "train", "*.mp4"), base_path=log_dir, policy="live")
+
     # load the checkpoint
     if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
