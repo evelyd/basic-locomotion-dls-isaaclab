@@ -15,7 +15,8 @@ from . import agents
 # Register Gym environments.
 ##
 from .locomotion_env import LocomotionEnv
-
+from .go2_stand_dance_env_cfg import Go2StandDanceEnvCfg
+from .go2_stand_dance_env import Go2StandDanceEnv
 
 # Aliengo environments
 from .locomotion_env import AliengoFlatEnvCfg, AliengoRoughVisionEnvCfg, AliengoRoughBlindEnvCfg
@@ -148,5 +149,15 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": HyQRealRoughVisionEnvCfg,
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:RoughPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Locomotion-Go2-Stand-Dance",
+    entry_point=Go2StandDanceEnv,
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": Go2StandDanceEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:Go2StandDancePPORunnerCfg",
     },
 )

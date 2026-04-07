@@ -100,21 +100,13 @@ class FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
             "clock_data",
         ]*int(history_length)
     obs_space_names_critic = obs_space_names_actor
-    
-    # Symmetry Related Stuff -  Asymmetric Critic
-    """obs_space_names_critic += ["position_gains", 
-            "velocity_gains",
-            "friction_static",
-            "friction_dynamic",
-            "armature"
-        ]"""
 
     morphologycal_symmetries_cfg = MorphologycalSymmetriesCfg(
         obs_space_names_actor = obs_space_names_actor,
         obs_space_names_critic = obs_space_names_critic,
         action_space_names = ["actions"],
         joints_order = [
-            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", 
+            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint",
             "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint",
             "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
         ],
@@ -132,8 +124,6 @@ class RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     policy = RslRlPpoActorCriticCfg(
         class_name="ActorCritic", #ActorCritic, ActorCriticRecurrent, ActorCriticSymm, ActorCriticMoE
         init_noise_std=1.0,
-        #actor_hidden_dims=[512, 256, 128],
-        #critic_hidden_dims=[512, 256, 128],
         actor_hidden_dims=[128, 128, 128],
         critic_hidden_dims=[128, 128, 128],
         activation="elu",
@@ -177,11 +167,6 @@ class RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
             "clock_data",
         ]*int(history_length)
 
-    #obs_space_names_actor += ["heightmap:rows4xcols4"]
-    #obs_space_names_actor += ["position_gains"]
-    #obs_space_names_actor += ["velocity_gains"]
-
-
     # Symmetry Related Stuff -  Asymmetric Critic
     obs_space_names_critic = [
             "base_lin_vel:base",
@@ -200,9 +185,68 @@ class RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         obs_space_names_critic = obs_space_names_critic,
         action_space_names = ["actions"],
         joints_order = [
-            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint", 
+            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint",
             "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint",
             "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
         ],
         robot_name = "a1",
+    )
+
+@configclass
+class Go2StandDancePPORunnerCfg(RslRlOnPolicyRunnerCfg):
+    num_steps_per_env = 24
+    max_iterations = 30000
+    save_interval = 300
+    experiment_name = "go2_stand_dance"
+    wandb_project = "go2_stand_dance"
+    empirical_normalization = False
+    num_envs = 8192
+
+    # Bypass the rigid wrapper and use native dicts for rsl_rl v3+
+    policy = RslRlPpoActorCriticCfg(
+        class_name="ActorCritic",
+        init_noise_std=1.0,
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
+        activation="elu",
+    )
+
+    algorithm = {
+        "class_name": "PPO",
+        "value_loss_coef": 1.0,
+        "use_clipped_value_loss": True,
+        "clip_param": 0.2,
+        "entropy_coef": 0.01,
+        "num_learning_epochs": 5,
+        "num_mini_batches": 4,
+        "learning_rate": 1.0e-4,
+        "schedule": "fixed",
+        "gamma": 0.99,
+        "lam": 0.95,
+        "desired_kl": 0.01,
+        "max_grad_norm": 1.0,
+    }
+
+    # Symmetry Related Stuff - Actor Critic
+    history_length = 3
+    obs_space_names_actor = [
+            "gravity:base",
+            "projected_forward",
+            "ctrl_commands",
+            "default_qpos_js_error",
+            "qvel_js",
+            "actions",
+        ]*int(history_length)
+    obs_space_names_critic = obs_space_names_actor
+
+    morphologycal_symmetries_cfg = MorphologycalSymmetriesCfg(
+        obs_space_names_actor = obs_space_names_actor,
+        obs_space_names_critic = obs_space_names_critic,
+        action_space_names = ["actions"],
+        joints_order = [
+            "FL_hip_joint", "FR_hip_joint", "RL_hip_joint", "RR_hip_joint",
+            "FL_thigh_joint", "FR_thigh_joint", "RL_thigh_joint", "RR_thigh_joint",
+            "FL_calf_joint", "FR_calf_joint", "RL_calf_joint", "RR_calf_joint"
+        ],
+        robot_name = "go2",
     )
