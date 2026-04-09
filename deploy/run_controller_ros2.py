@@ -44,9 +44,9 @@ os.system("echo -20 > /proc/" + str(pid) + "/autogroup")
 USE_MUJOCO_RENDER = False
 
 
-class Basic_Locomotion_DLS_Isaaclab_Node(Node):
+class ControllerROS2(Node):
     def __init__(self):
-        super().__init__('Basic_Locomotion_DLS_IsaacLab_Node')
+        super().__init__('ControllerROS2')
 
         # Mujoco env
         robot_name = config.robot
@@ -77,6 +77,7 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
         self.last_joy_time = None
         
         self.publisher_trajectory_generator = self.create_publisher(TrajectoryGenerator,"/trajectory_generator", 1)
+        self.sequence_id = 0 # To keep track of the last msg sent, useful for debugging and synchronization
         RL_FREQ = 1./(config.training_env["sim"]["dt"]*config.training_env["decimation"])  # Hz, frequency of the RL controller
         self.timer = self.create_timer(1.0/RL_FREQ, self.compute_rl_control)
 
@@ -141,7 +142,6 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
 
         self.last_joy_time = time.time()
 
-
         #kill the node if the button is pressed
         if msg.buttons[8] == 1:
             self.get_logger().info("Joystick button pressed, shutting down the node.") 
@@ -154,9 +154,8 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
 
 
     def get_base_state_callback(self, msg):
-        
         self.position = np.array(msg.pose.position) #world frame
-        # For the quaternion, the order is [w, x, y, z] on mujoco, and [x, y, z, w] on DLS2
+        # For the quaternion, the order is [x, y, z, w] on DLS2 but here we want [w, x, y, z] (mujoco convention)
         self.orientation = np.roll(np.array(msg.pose.orientation), 1) #world frame
         self.linear_velocity = np.array(msg.velocity.linear) #world frame
         self.angular_velocity = np.array(msg.velocity.angular) #base frame
@@ -166,7 +165,6 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
 
 
     def get_blind_state_callback(self, msg):
-        
         self.joint_positions = np.array(msg.joints_position)
         self.joint_velocities = np.array(msg.joints_velocity)
 
@@ -174,10 +172,10 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
      
         
     def get_imu_callback(self, msg):
-        # TODO check the frame
         self.imu_linear_acceleration = np.array(msg.linear_acceleration) 
         self.imu_angular_velocity = np.array(msg.angular_velocity) 
-        self.imu_orientation = np.array(msg.orientation) 
+        # For the quaternion, the order is [x, y, z, w] on DLS2 but here we want [w, x, y, z] (mujoco convention)
+        self.imu_orientation = np.roll(np.array(msg.orientation), 1) 
 
         self.first_message_imu_arrived = True
 
@@ -192,7 +190,7 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
         
 
         # Safety check to not do anything until a first base and blind state are received
-        if(config.training_env["use_imu"] or config.training_env["use_cuncurrent_state_est"]):
+        if(config.training_env["use_imu"] or config.training_env["use_concurrent_state_est"]):
             if(self.first_message_imu_arrived==False or self.first_message_joints_arrived==False):
                 return
         else:
@@ -205,7 +203,7 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
         self.env.mjData.qpos[0:3] = copy.deepcopy(self.position)
         self.env.mjData.qvel[0:3] = copy.deepcopy(self.linear_velocity)
 
-        if(config.training_env["use_imu"] or config.training_env["use_cuncurrent_state_est"]):
+        if(config.training_env["use_imu"] or config.training_env["use_concurrent_state_est"]):
             self.env.mjData.qpos[3:7] = copy.deepcopy(self.imu_orientation)
             self.env.mjData.qvel[3:6] = copy.deepcopy(self.imu_angular_velocity)
         else:
@@ -256,19 +254,7 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
         ref_base_lin_vel, ref_base_ang_vel = env.target_base_vel()
 
 
-        if(self.console.isDown):
-            desired_joint_pos = LegsAttr(*[np.zeros((1, int(env.mjModel.nu/4))) for _ in range(4)])
-            desired_joint_pos.FL = self.stand_up_and_down_actions.FL
-            desired_joint_pos.FR = self.stand_up_and_down_actions.FR
-            desired_joint_pos.RL = self.stand_up_and_down_actions.RL
-            desired_joint_pos.RR = self.stand_up_and_down_actions.RR
-
-            # Impedence Loop
-            Kp = locomotion_policy.Kp_stand_up_and_down
-            Kd = locomotion_policy.Kd_stand_up_and_down
-            
-
-        elif(self.console.isRLActivated):
+        if(self.console.isRLActivated):
 
             desired_joint_pos = locomotion_policy.compute_control(
                         base_pos=base_pos, 
@@ -304,6 +290,8 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
         # Publish the desired joint positions to the trajectory generator --------------------------------
         trajectory_generator_msg = TrajectoryGenerator()
         trajectory_generator_msg.timestamp = float(self.get_clock().now().nanoseconds)
+        trajectory_generator_msg.sequence_id = int(self.sequence_id % 1000)  # To avoid overflow, we reset the sequence id after it reaches a certain value
+        self.sequence_id += 1
         trajectory_generator_msg.joints_position = np.array([desired_joint_pos.FL, desired_joint_pos.FR, desired_joint_pos.RL, desired_joint_pos.RR]).flatten().tolist()
         trajectory_generator_msg.joints_velocity = np.zeros(12).tolist()
         trajectory_generator_msg.kp = (np.ones(12) * Kp).tolist()
@@ -313,10 +301,9 @@ class Basic_Locomotion_DLS_Isaaclab_Node(Node):
         
         
         
-        # Render the simulation -----------------------------------------------------------------------------------
+        # Render the simulation at a certain frequency -----------------------------------------------------------
         if USE_MUJOCO_RENDER:
-            RENDER_FREQ = 30
-            # Render only at a certain frequency -----------------------------------------------------------------
+            RENDER_FREQ = 30  # Hz
             if time.time() - self.last_render_time > 1.0 / RENDER_FREQ or self.env.step_num == 1:
                 self.env.render()
                 self.last_render_time = time.time()
@@ -330,11 +317,11 @@ if __name__ == '__main__':
     print('Hello from basic-locomotion-dls-isaaclab ros node.')
     
     rclpy.init()
-    basic_locomotion_dls_isaaclab_node = Basic_Locomotion_DLS_Isaaclab_Node()
-    rclpy.spin(basic_locomotion_dls_isaaclab_node)
+    controller_ros2_node = ControllerROS2()
+    rclpy.spin(controller_ros2_node)
     
-    basic_locomotion_dls_isaaclab_node.destroy_node()
+    controller_ros2_node.destroy_node()
     rclpy.shutdown()
 
-    print("basic-locomotion-dls-isaaclab ros node is stopped")
+    print("ControllerROS2 node is stopped")
     exit(0)

@@ -90,10 +90,14 @@ class Console():
                         continue
 
                     self.isDown = True
+                    self.isRLActivated = False
 
                     start_time = time.time()
                     time_motion = 5.
 
+                    #if(self.isRLActivated):
+                    #    initial_joint_positions = copy.deepcopy(self.controller_node.locomotion_policy.desired_joint_pos)
+                    #else:
                     temp = copy.deepcopy(self.controller_node.joint_positions)
                     initial_joint_positions = LegsAttr(*[np.zeros((1, int(self.controller_node.env.mjModel.nu/4))) for _ in range(4)])
                     initial_joint_positions.FL = temp[0:3]
@@ -123,6 +127,8 @@ class Console():
                         self.controller_node.stand_up_and_down_actions.RR = interpolated_positions[3]
 
                         time.sleep(0.01)
+
+                    self.isRLActivated = False
 
                     
                 elif(input_string == "activate"):

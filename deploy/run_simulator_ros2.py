@@ -1,6 +1,7 @@
 import rclpy 
 from rclpy.node import Node 
-from dls2_interface.msg import BaseState, BlindState, Imu, TrajectoryGenerator, FeetContactState
+from dls2_interface.msg import BaseState, BlindState, Imu, TrajectoryGenerator
+from unitree_go.msg import LowState, MotorState, IMUState
 
 import time
 import numpy as np
@@ -29,15 +30,16 @@ SCHEDULER_FREQ = 500 # Frequency of the scheduler
 RENDER_FREQ = 30
 
 # Shell for the controllers ----------------------------------------------
-class Simulator_Node(Node):
+class SimulatorROS2(Node):
     def __init__(self):
-        super().__init__('Simulator_Node')
+        super().__init__('SimulatorROS2')
 
         # Subscribers and Publishers
         self.publisher_base_state = self.create_publisher(BaseState,"base_state", 1)
         self.publisher_blind_state = self.create_publisher(BlindState,"blind_state", 1)
         self.publisher_imu = self.create_publisher(Imu,"imu", 1)
-        self.publisher_feet_contact_state = self.create_publisher(FeetContactState,"feet_contact_state", 1)
+
+        self.publisher_low_state = self.create_publisher(LowState,"lowstate", 1)
 
         self.subscriber_trajectory_generator = self.create_subscription(TrajectoryGenerator,"trajectory_generator", self.get_trajectory_generator_callback, 1)
 
@@ -113,17 +115,34 @@ class Simulator_Node(Node):
         imu_msg = Imu()
         imu_msg.linear_acceleration = self.env.mjData.sensordata[0:3]
         imu_msg.angular_velocity = self.env.mjData.sensordata[3:6]
-        imu_msg.orientation = self.env.mjData.sensordata[9:13]
+        # To be compliant with our hal, we expect the xyzw order, 
+        # but mujoco gives us wxyz, so we roll the array to get the correct order
+        imu_msg.orientation = np.roll(np.array(self.env.mjData.sensordata[9:13]), -1) 
         self.publisher_imu.publish(imu_msg)
 
 
-        # Publish Feet Contact State ------------------------------------------------
+        # Publish Low State of Unitree ------------------------------------------------
+        # FR, FL, RR, RL convention to follow the unitree standard msgs
+        lowstate_msg = LowState()
+        for i in range(3):
+            lowstate_msg.motor_state[i].q = self.env.mjData.qpos[self.env.legs_qpos_idx.FR[i]]
+            lowstate_msg.motor_state[i].dq = self.env.mjData.qvel[self.env.legs_qvel_idx.FR[i]]
+        for i in range(3):
+            lowstate_msg.motor_state[i+3].q = self.env.mjData.qpos[self.env.legs_qpos_idx.FL[i]]
+            lowstate_msg.motor_state[i+3].dq = self.env.mjData.qvel[self.env.legs_qvel_idx.FL[i]]
+        for i in range(3):
+            lowstate_msg.motor_state[i+6].q = self.env.mjData.qpos[self.env.legs_qpos_idx.RR[i]]
+            lowstate_msg.motor_state[i+6].dq = self.env.mjData.qvel[self.env.legs_qvel_idx.RR[i]]
+        for i in range(3):
+            lowstate_msg.motor_state[i+9].q = self.env.mjData.qpos[self.env.legs_qpos_idx.RL[i]]
+            lowstate_msg.motor_state[i+9].dq = self.env.mjData.qvel[self.env.legs_qvel_idx.RL[i]]
+
         _, _, feet_GRF = self.env.feet_contact_state(ground_reaction_forces=True)
-        feet_contact_state_msg = FeetContactState()
-        feet_contact_state_msg.feet_name = ["FL", "FR", "RL", "RR"]
-        feet_contact_state_msg.linear_grf_feet = np.concatenate([feet_GRF["FL"], feet_GRF["FR"], feet_GRF["RL"], feet_GRF["RR"]]).tolist()
-        feet_contact_state_msg.angular_grf_feet = np.concatenate([feet_GRF["FL"]*0.0, feet_GRF["FR"]*0.0, feet_GRF["RL"]*0.0, feet_GRF["RR"]*0.0]).tolist()
-        self.publisher_feet_contact_state.publish(feet_contact_state_msg)
+        lowstate_msg.foot_force = np.array([feet_GRF.FR[2], feet_GRF.FL[2], feet_GRF.RR[2], feet_GRF.RL[2]], dtype=np.int16)
+        lowstate_msg.imu_state.accelerometer = self.env.mjData.sensordata[0:3].astype(np.float32)
+        lowstate_msg.imu_state.gyroscope = self.env.mjData.sensordata[3:6].astype(np.float32)
+        lowstate_msg.imu_state.quaternion = np.roll(np.array(self.env.mjData.sensordata[9:13].astype(np.float32)), -1)  
+        self.publisher_low_state.publish(lowstate_msg)
 
 
         # Step the environment --------------------------------------------------------------------------------
@@ -156,13 +175,13 @@ class Simulator_Node(Node):
 
 
 def main():
-    print('Hello from the gym_quadruped simulator.')
+    print('Hello from the SimulatorROS2 node.')
     rclpy.init()
 
-    simulator_node = Simulator_Node()
+    simulator_ros2_node = SimulatorROS2()
 
-    rclpy.spin(simulator_node)
-    simulator_node.destroy_node()
+    rclpy.spin(simulator_ros2_node)
+    simulator_ros2_node.destroy_node()
     rclpy.shutdown()
 
 

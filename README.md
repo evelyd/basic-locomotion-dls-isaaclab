@@ -1,5 +1,6 @@
 <div style="text-align: left;">
-  <img src="https://img.shields.io/badge/IsaacLab%202.3.0-blue" alt="IsaacLab 2.3.0" style="margin-bottom: 1px;">
+  <img src="https://img.shields.io/badge/IsaacLab%20-v2.3.2-blue" alt="IsaacLab v2.3.0" style="margin-bottom: 1px;">
+  <img src="https://img.shields.io/badge/rsl_rl%20-v3.3.0-blue" alt="rsl-rl v3.3.0" style="margin-bottom: 1px;">
   <div style="display: flex; justify-content: space-around;">
     <img src="./gifs/train.gif" alt="Train" width="32%">
     <img src="./gifs/sim-to-sim.gif" alt="Sim-to-Sim" width="32%">
@@ -9,17 +10,22 @@
 
 ## Overview
 
-This repository provides basic reinforcement learning implementations for quadruped locomotion in IsaacLab. It includes support for different robots available at DLS, along with scripts for both sim-to-sim and sim-to-real transfer.
+Reinforcement learning implementation of **quadruped locomotion** in IsaacLab. It includes support for different robots available at DLS, with scripts for both sim-to-sim and sim-to-real transfer.
 
 Features:
-- [Cuncurrent State Estimator](https://arxiv.org/pdf/2202.05481)
+- [Concurrent State Estimator](https://arxiv.org/pdf/2202.05481)
 - [Rapid Motor Adaptation](https://arxiv.org/pdf/2107.04034)
 - [Morphological Symmetries](https://arxiv.org/pdf/2403.17320) 
 - [Adversarial Motion Priors](https://arxiv.org/pdf/2104.02180) (big thanks to [Giuseppe L'erario](https://github.com/Giulero) and [Giulio Romualdi](https://github.com/giulioromualdi))
+- Identification of robot parameters for sim2real using [pace](https://github.com/leggedrobotics/pace-sim2real) via our repo [sim2real-robot-identification](https://github.com/iit-DLSLab/sim2real-robot-identification)
 - Sim-to-Sim in [Mujoco](https://github.com/google-deepmind/mujoco)
-- Sim-to-Real in ROS1 and ROS2
+- Sim-to-Real using ROS2 
 
-A list of robots and environments available are described below:
+Real-world deployment via:
+- [muse](https://github.com/iit-DLSLab/muse/tree/unitree_sdk) for state estimation (if no concurrent state estimation is used)
+- [unitree-ros2-dls](https://github.com/iit-DLSLab/unitree-ros2-dls) for unitree robot communication
+
+A list of robots and environments available is described below:
 
 | Robot Model         | Environment Name Pattern                                   |
 |---------------------|------------------------------------------------------------|
@@ -29,6 +35,8 @@ A list of robots and environments available are described below:
 ## Installation and Runs
 
 If you want only to deploy a trained policy on your robot, continue on [README_DEPLOY](https://github.com/iit-DLSLab/basic-locomotion-dls-isaaclab/blob/main/README_DEPLOY.md) otherwise on [README_TRAIN](https://github.com/iit-DLSLab/basic-locomotion-dls-isaaclab/blob/main/README_TRAIN.md).
+
+**For the train, check first the compatibility with IsaacLab and rsl-rl at the top of this readme. They indicate the releases that we tested.**
 
 
 
