@@ -58,7 +58,8 @@ import os
 import time
 import torch
 
-from rsl_rl.runners import DistillationRunner, OnPolicyRunner
+from rsl_rl.runners import DistillationRunner
+from basic_locomotion_dls_isaaclab.runners.on_policy_runner import OnPolicyRunner
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -122,6 +123,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
+    # safely extract algorithm class name whether it's an object or a dictionary
+    algo_class_name = agent_cfg.algorithm.class_name if hasattr(agent_cfg.algorithm, "class_name") else agent_cfg.algorithm.get("class_name")
 
     # wrap for video recording
     if args_cli.video:
@@ -138,12 +141,63 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
+    # --- THE ULTIMATE NUCLEAR PATCH V3 ---
+    import copy
+
+    # 1. Sever ALL ties to IsaacLab's strict config schemas
+    agent_dict = copy.deepcopy(agent_cfg.to_dict() if hasattr(agent_cfg, "to_dict") else agent_cfg)
+    if not isinstance(agent_dict, dict):
+        agent_dict = dict(agent_dict)
+
+    # 2. Extract params securely from wherever IsaacLab hid them
+    pol = agent_dict.get("policy", {})
+    actor_block = pol.get("actor", {})
+    critic_block = pol.get("critic", {})
+
+    actor_hidden = actor_block.get("hidden_dims") or pol.get("actor_hidden_dims", [128, 128, 128])
+    critic_hidden = critic_block.get("hidden_dims") or pol.get("critic_hidden_dims", [128, 128, 128])
+    init_noise = pol.get("init_noise_std", 1.0)
+    activation = pol.get("activation", "elu")
+
+    # 3. Build the perfect v5 blocks with the explicit distribution class
+    perfect_actor = {
+        "class_name": "MLPModel",
+        "hidden_dims": actor_hidden,
+        "activation": activation,
+        "distribution_cfg": {
+            "class_name": "GaussianDistribution",
+            "init_std": init_noise
+        }
+    }
+
+    perfect_critic = {
+        "class_name": "MLPModel",
+        "hidden_dims": critic_hidden,
+        "activation": activation
+    }
+
+    # 4. Inject them at the ROOT (This is what rsl_rl v5 actually reads)
+    agent_dict["actor"] = copy.deepcopy(perfect_actor)
+    agent_dict["critic"] = copy.deepcopy(perfect_critic)
+
+    # 5. Mirror them inside 'policy' just in case a bridging version looks there
+    agent_dict.setdefault("policy", {})
+    agent_dict["policy"]["actor"] = copy.deepcopy(perfect_actor)
+    agent_dict["policy"]["critic"] = copy.deepcopy(perfect_critic)
+
+    # 6. Clean up legacy flat keys so they don't cause unexpected argument crashes
+    for d in [agent_dict, agent_dict["policy"]]:
+        d.pop("actor_hidden_dims", None)
+        d.pop("critic_hidden_dims", None)
+        d.pop("init_noise_std", None)
+    # -------------------------------------
+
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
     if agent_cfg.class_name == "OnPolicyRunner":
-        runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+        runner = OnPolicyRunner(env, agent_dict, log_dir=None, device=agent_cfg.device)
     elif agent_cfg.class_name == "DistillationRunner":
-        runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+        runner = DistillationRunner(env, agent_dict, log_dir=None, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     runner.load(resume_path)
@@ -179,12 +233,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     obs = env.get_observations()
     timestep = 0
     # simulate environment
+
+    action_trajectory = []
     while simulation_app.is_running():
         start_time = time.time()
         # run everything in inference mode
         with torch.inference_mode():
             # agent stepping
             actions = policy(obs)
+
+            action_trajectory.append(actions.cpu().numpy())
+
             # env stepping
             obs, _, dones, _ = env.step(actions)
             # reset recurrent states for episodes that have terminated
@@ -203,6 +262,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # close the simulator
     env.close()
 
+    # plot the action trajectory
+    import matplotlib.pyplot as plt
+    action_trajectory = torch.tensor(action_trajectory)
+    plt.figure(figsize=(12, 8))
+    for i in range(action_trajectory.shape[2]):
+        plt.plot(action_trajectory[:, 0, i], label=f"Action {i}")
+    plt.title("Action Trajectory")
+    plt.xlabel("Timestep")
+    plt.ylabel("Action Value")
+    plt.grid()
+    plt.savefig(os.path.join(export_model_dir, "action_trajectory.png"))
 
 if __name__ == "__main__":
     # run the main function
