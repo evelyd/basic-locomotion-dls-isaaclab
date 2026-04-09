@@ -61,6 +61,7 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     feet_slip_scale = -0.4
     foot_shift_scale = -50.0
     joints_energy_reward_scale = 0.0
+    collision_scale = 1.0 # in isaacgym was -2.0
 
     def __post_init__(self):
         super().__post_init__()

@@ -364,23 +364,23 @@ class Go2StandDanceEnv(DirectRLEnv):
         # implement upright balance reward
         # 1. Measure Pitch Angular Velocity (rocking forward/backward)
         pitch_vel = self._robot.data.root_ang_vel_b[:, 1]
-        
+
         # 2. Penalize high pitch velocity (Damper)
         # Using the tracking_ang_y_sigma = 0.1 from your old config
-        balance_reward = torch.exp(-torch.square(pitch_vel) / 0.1) 
-        
+        balance_reward = torch.exp(-torch.square(pitch_vel) / 0.1)
+
         # 3. Only apply this damper when the robot is actually standing
         balance_reward = balance_reward * is_stand.float()
-        
+
         # 1. Find the XY center point between the two rear feet
         rear_feet_xy = torch.mean(self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, :2], dim=1)
-        
+
         # 2. Get the Base CoM position in the XY plane
         base_xy = self._robot.data.root_pos_w[:, :2]
-        
+
         # 3. Calculate the squared distance between CoM and the support center
         com_shift_error = torch.sum(torch.square(base_xy - rear_feet_xy), dim=-1)
-        
+
         # 4. Reward keeping the CoM directly over the feet (only when trying to stand!)
         # (Using a tight 0.02 sigma so it requires precision)
         support_polygon_reward = torch.exp(-com_shift_error / 0.02) * is_stand.float()
@@ -466,10 +466,10 @@ class Go2StandDanceEnv(DirectRLEnv):
         # stand_air = grace_period & mercy_steps & torch.any((rear_foot_heights > 0.06), dim=-1)
         # Only kill for stand_air AFTER the launch phase is over
         physics_settle_steps = self.episode_length_buf > 3
-        
+
         rear_foot_heights = self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, 2]
         init_rear_foot_heights = self._init_rear_feet_pos_w[:, :, 2]
-        
+
         # Only penalize jumping DURING the mercy steps, and allow a 15cm bounce margin for PhysX 5
         stand_air = physics_settle_steps & mercy_steps & torch.any(
             (rear_foot_heights > init_rear_foot_heights + 0.06), dim=-1
@@ -480,7 +480,7 @@ class Go2StandDanceEnv(DirectRLEnv):
         abrupt_change = physics_settle_steps & mercy_steps & torch.any(
                     torch.abs(self._robot.data.joint_pos - self._previous_joint_pos) > 0.3, dim=-1
                 )
-        
+
         # COMBINE EXACTLY LIKE ISAAC GYM (reset_buf |= ...)
         died = contact_died | position_protect | stand_air | abrupt_change
 
