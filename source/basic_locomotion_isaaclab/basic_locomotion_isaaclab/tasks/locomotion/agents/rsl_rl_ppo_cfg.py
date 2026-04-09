@@ -25,7 +25,7 @@ class DiscriminatorCfg:
 
     loss_type: str = "BCEWithLogits"
     """The type of loss to use for training the discriminator. Default is BCEWithLogits."""
-    
+
     empirical_normalization: bool = False
     """Whether to use empirical normalization for the discriminator inputs. Default is False."""
 
@@ -221,21 +221,21 @@ class Go2StandDancePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         activation="elu",
     )
 
-    algorithm = {
-        "class_name": "PPO",
-        "value_loss_coef": 1.0,
-        "use_clipped_value_loss": True,
-        "clip_param": 0.2,
-        "entropy_coef": 0.01,
-        "num_learning_epochs": 5,
-        "num_mini_batches": 4,
-        "learning_rate": 1.0e-4,
-        "schedule": "adaptive", #"fixed",
-        "gamma": 0.99,
-        "lam": 0.95,
-        "desired_kl": 0.01,
-        "max_grad_norm": 1.0,
-    }
+    algorithm = RslRlPpoAlgorithmCfg(
+        class_name="PPO", #PPO, PPOSymmDataAugmented #AMP_PPO
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-4,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+    )
 
     # Symmetry Related Stuff - Actor Critic
     history_length = 3

@@ -82,8 +82,7 @@ import time
 import torch
 from datetime import datetime
 
-from rsl_rl.runners import DistillationRunner
-from basic_locomotion_dls_isaaclab.runners.on_policy_runner import OnPolicyRunner
+from rsl_rl.runners import DistillationRunner, OnPolicyRunner
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -174,11 +173,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
-    # safely extract algorithm class name whether it's an object or a dictionary
-    algo_class_name = agent_cfg.algorithm.class_name if hasattr(agent_cfg.algorithm, "class_name") else agent_cfg.algorithm.get("class_name")
 
     # save resume path before creating a new log_dir
-    if agent_cfg.resume or algo_class_name == "Distillation":
+    if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 
     # wrap for video recording
@@ -198,77 +195,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
-    # --- THE ULTIMATE NUCLEAR PATCH V3 ---
-    import copy
-
-    # 1. Sever ALL ties to IsaacLab's strict config schemas
-    agent_dict = copy.deepcopy(agent_cfg.to_dict() if hasattr(agent_cfg, "to_dict") else agent_cfg)
-    if not isinstance(agent_dict, dict):
-        agent_dict = dict(agent_dict)
-
-    # 2. Extract params securely from wherever IsaacLab hid them
-    pol = agent_dict.get("policy", {})
-    actor_block = pol.get("actor", {})
-    critic_block = pol.get("critic", {})
-
-    actor_hidden = actor_block.get("hidden_dims") or pol.get("actor_hidden_dims", [128, 128, 128])
-    critic_hidden = critic_block.get("hidden_dims") or pol.get("critic_hidden_dims", [128, 128, 128])
-    init_noise = pol.get("init_noise_std", 1.0)
-    activation = pol.get("activation", "elu")
-
-    # 3. Build the perfect v5 blocks with the explicit distribution class
-    perfect_actor = {
-        "class_name": "MLPModel",
-        "hidden_dims": actor_hidden,
-        "activation": activation,
-        "distribution_cfg": {
-            "class_name": "GaussianDistribution",
-            "init_std": init_noise
-        }
-    }
-
-    perfect_critic = {
-        "class_name": "MLPModel",
-        "hidden_dims": critic_hidden,
-        "activation": activation
-    }
-
-    # 4. Inject them at the ROOT (This is what rsl_rl v5 actually reads)
-    agent_dict["actor"] = copy.deepcopy(perfect_actor)
-    agent_dict["critic"] = copy.deepcopy(perfect_critic)
-
-    # 5. Mirror them inside 'policy' just in case a bridging version looks there
-    agent_dict.setdefault("policy", {})
-    agent_dict["policy"]["actor"] = copy.deepcopy(perfect_actor)
-    agent_dict["policy"]["critic"] = copy.deepcopy(perfect_critic)
-
-    # 6. Clean up legacy flat keys so they don't cause unexpected argument crashes
-    for d in [agent_dict, agent_dict["policy"]]:
-        d.pop("actor_hidden_dims", None)
-        d.pop("critic_hidden_dims", None)
-        d.pop("init_noise_std", None)
-    # -------------------------------------
-
     # create runner from rsl-rl
     if agent_cfg.class_name == "OnPolicyRunner":
-        runner = OnPolicyRunner(env, agent_dict, log_dir=log_dir, device=agent_cfg.device)
+        runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     elif agent_cfg.class_name == "DistillationRunner":
-        runner = DistillationRunner(env, agent_dict, log_dir=log_dir, device=agent_cfg.device)
+        runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
-
-    if args_cli.video:
-        import wandb
-        if wandb.run is not None:
-            print("[INFO] Syncing local videos to Weights & Biases.")
-            # Tell W&B to upload any .mp4 files in the video directory as they are created
-            input(f"saving videos to wnandb")
-            wandb.save(os.path.join(log_dir, "videos", "train", "*.mp4"), base_path=log_dir, policy="live")
-
     # load the checkpoint
-    if agent_cfg.resume or algo_class_name == "Distillation":
+    if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
         # load previously trained model
         runner.load(resume_path)
