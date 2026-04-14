@@ -112,6 +112,59 @@ torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
 
+import pathlib
+import wandb
+from rsl_rl.runners import OnPolicyRunner
+
+import pathlib
+import wandb
+import os
+from rsl_rl.runners import OnPolicyRunner
+
+class CustomOnPolicyRunner(OnPolicyRunner):
+    def __init__(self, env, train_cfg, log_dir=None, device="cpu"):
+        super().__init__(env, train_cfg, log_dir, device)
+        self.logged_videos = set()
+        print(f"[VideoCheck] Initialized. Searching in: {self.log_dir}")
+
+    def log(self, locs: dict, width: int = 80, pad: int = 35) -> None:
+        super().log(locs, width, pad)
+
+        # Only Rank 0 should upload to avoid conflicts
+        if self.logger_type == "wandb" and self.log_dir is not None and not self.disable_logs:
+
+            # Use absolute path to be safe
+            abs_log_dir = pathlib.Path(self.log_dir).resolve()
+            video_dir = abs_log_dir / "videos" / "train"
+
+            if not video_dir.exists():
+                # This will print every iteration if the path is wrong
+                # Once you confirm the path, you can remove this print
+                print(f"[VideoCheck] Folder not found: {video_dir}")
+                return
+
+            # Find all mp4s
+            videos = list(video_dir.glob("*.mp4"))
+
+            for video_path in videos:
+                if video_path.name not in self.logged_videos:
+                    file_size = video_path.stat().st_size
+
+                    if file_size > 5000: # Ensure file is > 5KB (not empty/corrupt)
+                        print(f"[VideoCheck] Found NEW video: {video_path.name} ({file_size} bytes). Uploading...")
+                        try:
+                            # Use a specific key 'eval/video' to make it stand out in W&B
+                            wandb.log(
+                                {"training_video": wandb.Video(str(video_path), format="mp4")},
+                                step=locs["it"]
+                            )
+                            self.logged_videos.add(video_path.name)
+                            print(f"[VideoCheck] Successfully queued {video_path.name} for W&B.")
+                        except Exception as e:
+                            print(f"[VideoCheck] W&B Upload Failed: {e}")
+                    else:
+                        # File exists but IsaacLab hasn't finished writing it yet
+                        print(f"[VideoCheck] Waiting for {video_path.name} to finish writing...")
 
 @hydra_task_config(args_cli.task, args_cli.agent)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
@@ -197,7 +250,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create runner from rsl-rl
     if agent_cfg.class_name == "OnPolicyRunner":
-        runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+        # runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+        runner = CustomOnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     elif agent_cfg.class_name == "DistillationRunner":
         runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     else:

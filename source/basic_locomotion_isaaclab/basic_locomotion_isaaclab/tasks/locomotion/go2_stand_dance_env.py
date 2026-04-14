@@ -54,10 +54,7 @@ class Go2StandDanceEnv(DirectRLEnv):
         )
 
         # Find termination contact bodies
-        self._term_contact_ids, _ = self._contact_sensor.find_bodies(["base", ".*hip", ".*thigh", ".*calf.*"])
-
-        # Find grace period contact bodies
-        self._allow_init_contact_ids, _ = self._contact_sensor.find_bodies([".*foot", "R.*calf.*"])
+        self._term_contact_ids, _ = self._contact_sensor.find_bodies(["base", ".*hip", ".*thigh", ".*calf.*", "F.*foot"])
 
         # Upright vector pre-allocation
         self._upright_vec_w = torch.tensor(self.cfg.upright_vec, device=self.device).repeat(self.num_envs, 1)
@@ -399,15 +396,15 @@ class Go2StandDanceEnv(DirectRLEnv):
             "action_q_diff": q_diff * self.cfg.action_q_diff_scale * self.reward_cl * self.step_dt,
 
             # Regularization
-            "action_rate": action_rate_reward * self.cfg.action_rate_reward_scale * self.step_dt,
-            "joints_torque": torques_reward * self.cfg.joints_torque_reward_scale * self.step_dt,
-            "hip_still": hip_still_reward * self.cfg.hip_still_scale * self.step_dt,
+            "action_rate": action_rate_reward * self.cfg.action_rate_reward_scale * self.reward_cl * self.step_dt,
+            "joints_torque": torques_reward * self.cfg.joints_torque_reward_scale * self.reward_cl * self.step_dt,
+            "hip_still": hip_still_reward * self.cfg.hip_still_scale * self.reward_cl * self.step_dt,
 
             # Clock stepping
-            "feet_clearance_cmd_linear": rew_foot_clearance * self.cfg.feet_clearance_cmd_linear_scale * self.step_dt,
-            "feet_slip": rew_feet_slip * self.cfg.feet_slip_scale * self.step_dt,
-            "foot_shift": rew_foot_shift * self.cfg.foot_shift_scale * self.step_dt,
-            "collision": rew_collision * self.cfg.undesired_contact_reward_scale * self.step_dt,
+            "feet_clearance_cmd_linear": rew_foot_clearance * self.cfg.feet_clearance_cmd_linear_scale * self.reward_cl * self.step_dt,
+            "feet_slip": rew_feet_slip * self.cfg.feet_slip_scale * self.reward_cl * self.step_dt,
+            "foot_shift": rew_foot_shift * self.cfg.foot_shift_scale * self.reward_cl * self.step_dt,
+            "collision": rew_collision * self.cfg.undesired_contact_reward_scale * self.reward_cl * self.step_dt,
         }
 
         # Add to episodic sums for logging
@@ -441,7 +438,6 @@ class Go2StandDanceEnv(DirectRLEnv):
 
         # 1. EXACT ISAAC GYM CONTACT IMMUNITY LOGIC
         any_term_contact = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._term_contact_ids], dim=-1), dim=1)[0] > 1.0, dim=1)
-        any_allow_init_contact = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._allow_init_contact_ids], dim=-1), dim=1)[0] > 1.0, dim=1)
 
         mercy_steps = self.episode_length_buf <= self.cfg.allow_contact_steps
 
@@ -449,14 +445,13 @@ class Go2StandDanceEnv(DirectRLEnv):
         contact_died = any_term_contact & ~mercy_steps
 
         # 2. POSITION PROTECT (Limits + 5 degrees)
-        grace_period = self.episode_length_buf > 30
         joint_pos = self._robot.data.joint_pos
 
         # EXACT ISAAC GYM FIX: Use true joint_pos_limits, NOT soft_joint_pos_limits!
         hard_limits = self._robot.data.joint_pos_limits
 
         margin = 5.0 * 3.14159 / 180.0
-        position_protect = grace_period & torch.any(
+        position_protect = ~mercy_steps & torch.any(
             (joint_pos < hard_limits[:, :, 0] + margin) | (joint_pos > hard_limits[:, :, 1] - margin), dim=-1
         )
 
@@ -506,7 +501,7 @@ class Go2StandDanceEnv(DirectRLEnv):
 
         print(f"metric: {metric}")
 
-        if metric > 0.2:
+        if metric > self.cfg.metric_threshold:
             cl_step = getattr(self.cfg, "cl_step", 0.2)
             self.reward_cl = min(1.0, self.reward_cl + cl_step)
 

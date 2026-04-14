@@ -21,6 +21,7 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     # Define reward curriculum
     cl_init = 0.4
     cl_step = 0.2
+    metric_threshold = 20.0
 
     # Stand Dance Specific Parameters
     lift_up_threshold = [0.35, 0.6]
@@ -44,9 +45,9 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     tracking_lin_vel_stand_scale = 0.8
     tracking_ang_vel_stand_scale = 0.5
     lift_up_linear_scale = 0.8
-    upright_scale = 5.0
+    upright_scale = 10.0
     # upright_balance_scale = 2.0
-    support_polygon_scale = 5.0
+    support_polygon_scale = 10.0
 
     # Penalties
     termination_reward_scale = 0.0
@@ -57,11 +58,11 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     rear_air_scale = -0.5
     action_q_diff_scale = -1.0
     hip_still_scale = -0.5
-    feet_clearance_cmd_linear_scale = -800.0
+    feet_clearance_cmd_linear_scale = -8000.0
     feet_slip_scale = -0.4
     foot_shift_scale = -50.0
     joints_energy_reward_scale = 0.0
-    collision_scale = 1.0 # in isaacgym was -2.0
+    collision_scale = -2.0 # in isaacgym was -2.0
 
     def __post_init__(self):
         super().__post_init__()
