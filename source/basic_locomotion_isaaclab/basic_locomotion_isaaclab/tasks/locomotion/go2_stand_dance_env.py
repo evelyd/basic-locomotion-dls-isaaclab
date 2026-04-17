@@ -82,10 +82,12 @@ class Go2StandDanceEnv(DirectRLEnv):
             "feet_slip": torch.zeros(self.num_envs, dtype=torch.float, device=self.device),
             "foot_shift": torch.zeros(self.num_envs, dtype=torch.float, device=self.device),
             "collision": torch.zeros(self.num_envs, dtype=torch.float, device=self.device),
+            "termination": torch.zeros(self.num_envs, dtype=torch.float, device=self.device),
         }
 
         # Initialize reward curriculum level (defaults to 1.0 if not using curriculum)
         self.reward_cl = getattr(self.cfg, "cl_init", 1.0) # Matches cl_init from config
+        self.metric = 0.0
 
         # Clock buffers for walking rhythm
         self._rear_foot_indices = torch.zeros(self.num_envs, 2, device=self.device)
@@ -272,9 +274,12 @@ class Go2StandDanceEnv(DirectRLEnv):
         # action q diff rew
         # Bulletproof explicit motor target calculation
         motor_targets = (self._actions * self.cfg.action_scale) + self._robot.data.default_joint_pos
-        q_diff_raw = torch.sum(torch.square(motor_targets - self._robot.data.joint_pos), dim=-1)
-        # q_diff = q_diff_raw * mercy_mask_float
-        q_diff = q_diff_raw
+        # q_diff_raw = torch.sum(torch.square(motor_targets - self._robot.data.joint_pos), dim=-1)
+        # # q_diff = q_diff_raw * mercy_mask_float
+        # q_diff = q_diff_raw
+        # Use torch.abs (L1 Norm) to prevent the exponential explosion!
+        q_diff = torch.sum(torch.abs(motor_targets - self._robot.data.joint_pos), dim=-1)
+
         # Relax the tracking sigma to match Isaac Gym (0.25 instead of 0.05)
         track_lin_vel = torch.exp(-lin_vel_error / 0.25) * is_stand.float() * scaling_factor
 
@@ -382,6 +387,15 @@ class Go2StandDanceEnv(DirectRLEnv):
         # (Using a tight 0.02 sigma so it requires precision)
         support_polygon_reward = torch.exp(-com_shift_error / 0.02) * is_stand.float()
 
+        # Termination reward
+        net_contact_forces = self._contact_sensor.data.net_forces_w_history
+        any_term_contact = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._term_contact_ids], dim=-1), dim=1)[0] > 1.0, dim=1)
+        mercy_steps = self.episode_length_buf <= self.cfg.allow_contact_steps
+
+        # Did the robot touch a forbidden body part outside the grace period and did it already learn to succeed with the task?
+        learned_stand_dance = self.metric > self.cfg.term_metric_threshold
+        termination = any_term_contact & ~mercy_steps & learned_stand_dance
+
         rewards = {
             "lift_up_linear": lift_up_reward * self.cfg.lift_up_linear_scale * self.step_dt,
             "tracking_lin_vel": track_lin_vel * self.cfg.tracking_lin_vel_stand_scale * self.step_dt,
@@ -405,6 +419,7 @@ class Go2StandDanceEnv(DirectRLEnv):
             "feet_slip": rew_feet_slip * self.cfg.feet_slip_scale * self.reward_cl * self.step_dt,
             "foot_shift": rew_foot_shift * self.cfg.foot_shift_scale * self.reward_cl * self.step_dt,
             "collision": rew_collision * self.cfg.undesired_contact_reward_scale * self.reward_cl * self.step_dt,
+            "termination": termination.float() * self.cfg.termination_reward_scale * self.reward_cl,
         }
 
         # Add to episodic sums for logging
@@ -497,11 +512,11 @@ class Go2StandDanceEnv(DirectRLEnv):
         # ====================================================================
         # 1. EVALUATE CURRICULUM FIRST!
         # ====================================================================
-        metric = torch.mean(self._clipped_episode_sums[env_ids])
+        self.metric = torch.mean(self._clipped_episode_sums[env_ids])
 
-        print(f"metric: {metric}")
+        print(f"metric: {self.metric}")
 
-        if metric > self.cfg.metric_threshold:
+        if self.metric > self.cfg.metric_threshold:
             cl_step = getattr(self.cfg, "cl_step", 0.2)
             self.reward_cl = min(1.0, self.reward_cl + cl_step)
 
@@ -510,6 +525,11 @@ class Go2StandDanceEnv(DirectRLEnv):
         if "episode" not in self.extras:
             self.extras["episode"] = {}
         self.extras["episode"]["reward_cl"] = torch.tensor(self.reward_cl, device=self.device)
+        self.extras["episode"]["reward_cl_metric"] = self.metric
+
+        # Log the current maximum command bounds to WandB
+        self.extras["episode"]["command_max_lin_vel"] = self._command_ranges["lin_vel_x"][1]
+        self.extras["episode"]["command_max_ang_vel"] = self._command_ranges["ang_vel_z"][1]
 
         # ====================================================================
         # 2. STANDARD RESET (No Hacks!)
@@ -602,11 +622,11 @@ class Go2StandDanceEnv(DirectRLEnv):
         normalized_ang_vel_reward = avg_tracking_ang_vel / self.cfg.tracking_ang_vel_stand_scale
 
         if normalized_lin_vel_reward > 0.8:
-            self._command_ranges["lin_vel_x"][0] = torch.clip(self._command_ranges["lin_vel_x"][0] - 0.2, -self.command_max_curriculum, 0.)
-            self._command_ranges["lin_vel_x"][1] = torch.clip(self._command_ranges["lin_vel_x"][1] + 0.2, 0., self.command_max_curriculum)
-            self._command_ranges["lin_vel_y"][0] = torch.clip(self._command_ranges["lin_vel_y"][0] - 0.2, -self.command_max_curriculum, 0.)
-            self._command_ranges["lin_vel_y"][1] = torch.clip(self._command_ranges["lin_vel_y"][1] + 0.2, 0., self.command_max_curriculum)
+            self._command_ranges["lin_vel_x"][0] = torch.clip(self._command_ranges["lin_vel_x"][0] - self.cfg.curriculum_cl_step, -self.command_max_curriculum, 0.)
+            self._command_ranges["lin_vel_x"][1] = torch.clip(self._command_ranges["lin_vel_x"][1] + self.cfg.curriculum_cl_step, 0., self.command_max_curriculum)
+            self._command_ranges["lin_vel_y"][0] = torch.clip(self._command_ranges["lin_vel_y"][0] - self.cfg.curriculum_cl_step, -self.command_max_curriculum, 0.)
+            self._command_ranges["lin_vel_y"][1] = torch.clip(self._command_ranges["lin_vel_y"][1] + self.cfg.curriculum_cl_step, 0., self.command_max_curriculum)
 
         if normalized_ang_vel_reward > 0.8:
-            self._command_ranges["ang_vel_z"][0] = torch.clip(self._command_ranges["ang_vel_z"][0] - 0.2, -self.command_max_curriculum, 0.)
-            self._command_ranges["ang_vel_z"][1] = torch.clip(self._command_ranges["ang_vel_z"][1] + 0.2, 0., self.command_max_curriculum)
+            self._command_ranges["ang_vel_z"][0] = torch.clip(self._command_ranges["ang_vel_z"][0] - self.cfg.curriculum_cl_step, -self.command_max_curriculum, 0.)
+            self._command_ranges["ang_vel_z"][1] = torch.clip(self._command_ranges["ang_vel_z"][1] + self.cfg.curriculum_cl_step, 0., self.command_max_curriculum)

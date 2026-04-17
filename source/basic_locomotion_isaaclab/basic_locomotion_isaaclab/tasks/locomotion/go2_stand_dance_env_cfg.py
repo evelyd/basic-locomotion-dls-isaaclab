@@ -21,7 +21,11 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     # Define reward curriculum
     cl_init = 0.4
     cl_step = 0.2
-    metric_threshold = 20.0
+    metric_threshold = 10.0
+    term_metric_threshold = 30.0
+
+    # Define command curriculum
+    curriculum_cl_step = 0.2
 
     # Stand Dance Specific Parameters
     lift_up_threshold = [0.35, 0.6]
@@ -50,9 +54,9 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     support_polygon_scale = 10.0
 
     # Penalties
-    termination_reward_scale = 0.0
+    termination_reward_scale = -100.0
     undesired_contact_reward_scale = -2.0
-    action_rate_reward_scale = -0.03
+    action_rate_reward_scale = -0.15
     joints_torque_reward_scale = -2.0e-5
     joints_accel_reward_scale = -2.5e-7
     rear_air_scale = -0.5
@@ -74,3 +78,7 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
             ".*_thigh_joint": 0.9,
             ".*_calf_joint": -1.6,
         }
+
+@configclass
+class Go2StandDanceEnvPlayCfg(Go2StandDanceEnvCfg):
+    curriculum_cl_step = 0.0
