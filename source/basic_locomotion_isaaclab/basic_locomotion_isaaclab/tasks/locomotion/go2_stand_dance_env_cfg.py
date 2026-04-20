@@ -58,7 +58,7 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     undesired_contact_reward_scale = -2.0
     action_rate_reward_scale = -0.15
     joints_torque_reward_scale = -2.0e-5
-    joints_accel_reward_scale = -2.5e-7
+    joints_accel_reward_scale = -2.5e-5
     rear_air_scale = -0.5
     action_q_diff_scale = -1.0
     hip_still_scale = -0.5
