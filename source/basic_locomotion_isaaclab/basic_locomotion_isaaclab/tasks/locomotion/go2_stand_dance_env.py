@@ -284,6 +284,8 @@ class Go2StandDanceEnv(DirectRLEnv):
         track_lin_vel = torch.exp(-lin_vel_error / 0.25) * is_stand.float() * scaling_factor
 
         # action rate pen
+        # action_rate_raw = torch.sum(torch.square(self._previous_actions - self._actions), dim=1)
+        # action_rate_reward = torch.exp(-action_rate_raw / 0.05)
         action_rate_reward = torch.sum(torch.square(self._previous_actions - self._actions), dim=1)
 
         # joint torque pen

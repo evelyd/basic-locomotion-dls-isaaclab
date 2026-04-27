@@ -28,7 +28,7 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     curriculum_cl_step = 0.2
 
     # Stand Dance Specific Parameters
-    lift_up_threshold = [0.35, 0.6]
+    lift_up_threshold = [0.25, 0.45]
     scale_factor_low = 0.25
     scale_factor_high = 0.35
     upright_vec = [-0.0524078, 0.0, 1.0]
@@ -62,7 +62,7 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     rear_air_scale = -0.5
     action_q_diff_scale = -1.0
     hip_still_scale = -0.5
-    feet_clearance_cmd_linear_scale = -8000.0
+    feet_clearance_cmd_linear_scale = -3000.0
     feet_slip_scale = -0.4
     foot_shift_scale = -50.0
     joints_energy_reward_scale = 0.0
