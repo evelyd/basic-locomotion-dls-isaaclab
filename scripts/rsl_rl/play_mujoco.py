@@ -134,6 +134,9 @@ class Go2EnvShim:
                 if a_id == -1:
                     a_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, f"{name}_motor")
                 if a_id == -1:
+                    # NEW: Fallback for XMLs where the actuator name drops the "_joint" suffix
+                    a_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name.replace("_joint", ""))
+                if a_id == -1:
                     raise ValueError(f"Actuator for {name} not found")
 
                 self.actuator_indices.append(a_id)
