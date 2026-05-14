@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gymnasium as gym
 import torch
+import math
 
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as math_utils
@@ -348,9 +349,11 @@ class Go2StandDanceEnv(DirectRLEnv):
 
         front_foot_shift = torch.norm(torch.stack([dx, dy], dim=-1), dim=-1).mean(dim=1)
 
-        # --- APPLY THE MASK ---
-        # Only active during the initial sit-to-stand phase
-        shift_condition = (self.episode_length_buf <= self.cfg.allow_contact_steps).float()
+        # NEW: Identify sitting robots
+        started_sitting_float = torch.all(self._init_rear_feet_pos_w[:, :, 2] < 0.05, dim=-1).float()
+
+        # Multiply by started_sitting_float so standing robots are immune!
+        shift_condition = (self.episode_length_buf <= self.cfg.allow_contact_steps).float() * started_sitting_float
         rew_foot_shift = (front_foot_shift + rear_foot_shift) * shift_condition
 
         # 1. Get current instantaneous contact forces on all penalized bodies
@@ -474,19 +477,17 @@ class Go2StandDanceEnv(DirectRLEnv):
 
         # 3. STAND AIR CONDITION (Rear feet > 6cm during mercy steps)
         rear_foot_heights = self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, 2]
-        # # (Assuming flat terrain at Z=0 for height calculation)
-        # stand_air = grace_period & mercy_steps & torch.any((rear_foot_heights > 0.06), dim=-1)
-        # Only kill for stand_air AFTER the launch phase is over
-        physics_settle_steps = self.episode_length_buf > 3
-
-        rear_foot_heights = self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, 2]
         init_rear_foot_heights = self._init_rear_feet_pos_w[:, :, 2]
 
-        # Only penalize jumping DURING the mercy steps, and allow a 15cm bounce margin for PhysX 5
-        stand_air = physics_settle_steps & mercy_steps & torch.any(
+        physics_settle_steps = self.episode_length_buf > 3
+
+        # NEW: Identify which robots spawned sitting (init height near 0.02m)
+        started_sitting = torch.all(init_rear_foot_heights < 0.05, dim=-1)
+
+        # Only kill for stand_air if it was a sitting robot that jumped!
+        stand_air = physics_settle_steps & mercy_steps & started_sitting & torch.any(
             (rear_foot_heights > init_rear_foot_heights + 0.06), dim=-1
         )
-        # TODO do i need termination rewards?
 
         # 4. ABRUPT CHANGE (Joints move > 0.3 rad)
         abrupt_change = physics_settle_steps & mercy_steps & torch.any(
@@ -542,35 +543,99 @@ class Go2StandDanceEnv(DirectRLEnv):
         if self.cfg.use_observation_history:
             self._observation_history[env_ids] = 0.0
 
-        # EXACT ISAAC GYM SPAWN: Fetch the Stand states...
+        # ------------------------------------------------------------------
+        # 1. CREATE 50/50 SPLIT MASK
+        # ------------------------------------------------------------------
+        num_resets = len(env_ids)
+        rand_mask = torch.rand(num_resets, device=self.device)
+
+        # Boolean masks sized exactly to the number of resetting envs
+        sit_mask = rand_mask < 0.5
+        stand_mask = ~sit_mask
+
+        # Get local row indices as column vectors [K, 1] for safe PyTorch broadcasting
+        sit_local_rows = sit_mask.nonzero(as_tuple=False)
+        stand_local_rows = stand_mask.nonzero(as_tuple=False)
+
+        # ------------------------------------------------------------------
+        # 2. FETCH DEFAULT STATES & JOINT INDICES
+        # ------------------------------------------------------------------
+        # These are now sized [num_resets, ...]
         default_root_state = self._robot.data.default_root_state[env_ids].clone()
         default_root_state[:, :2] += self._terrain.env_origins[env_ids, :2]
-
-        # ...but OVERRIDE the base height to be low to the ground!
-        default_root_state[:, 2] = 0.221
 
         joint_pos = self._robot.data.default_joint_pos[env_ids].clone()
         joint_vel = self._robot.data.default_joint_vel[env_ids].clone()
 
-        # OVERRIDE the joints to the Sit Pose!
         hip_idx = self._robot.find_joints(".*hip_joint")[0]
         thigh_idx = self._robot.find_joints(".*thigh_joint")[0]
         calf_idx = self._robot.find_joints(".*calf_joint")[0]
 
-        joint_pos[:, hip_idx] = 0.0
-        joint_pos[:, thigh_idx] = 1.2
-        joint_pos[:, calf_idx] = -2.15
+        front_thigh_idx = self._robot.find_joints("F.*_thigh_joint")[0]
+        rear_thigh_idx = self._robot.find_joints("R.*_thigh_joint")[0]
 
+        # ------------------------------------------------------------------
+        # 3. APPLY "SIT POSE" TO 50%
+        # ------------------------------------------------------------------
+        if len(sit_local_rows) > 0:
+            # For 1D indexing, boolean masks work perfectly
+            default_root_state[sit_mask, 2] = 0.221
+
+            # For 2D indexing, use the local column vectors!
+            joint_pos[sit_local_rows, hip_idx] = 0.0
+            joint_pos[sit_local_rows, thigh_idx] = 1.2
+            joint_pos[sit_local_rows, calf_idx] = -2.15
+
+        # ------------------------------------------------------------------
+        # 4. APPLY RAMBO "STAND POSE" TO 50%
+        # ------------------------------------------------------------------
+        if len(stand_local_rows) > 0:
+            default_root_state[stand_mask, 2] = 0.45
+
+            quat_w = math.sqrt(2) / 2
+            quat_y = -math.sqrt(2) / 2
+            default_root_state[stand_mask, 3:7] = torch.tensor([quat_w, 0.0, quat_y, 0.0], device=self.device)
+
+            joint_pos[stand_local_rows, hip_idx] = 0.0
+            joint_pos[stand_local_rows, front_thigh_idx] = math.pi / 2
+            joint_pos[stand_local_rows, rear_thigh_idx] = 1.0 + (math.pi / 2)
+            joint_pos[stand_local_rows, calf_idx] = -1.5
+
+        # ------------------------------------------------------------------
+        # 5. APPLY RAMBO NOISE RANDOMIZATION (To all environments)
+        # ------------------------------------------------------------------
+        # Ensure 'randomize_initial_state = True' is in your config!
+        if getattr(self.cfg, "randomize_initial_state", True):
+            joint_pos += torch.rand_like(joint_pos) * 0.2 - 0.1
+            joint_vel += torch.rand_like(joint_vel) * 0.1 - 0.05
+
+            default_root_state[:, :3] += torch.rand_like(default_root_state[:, :3]) * 0.1 - 0.05
+            default_root_state[:, 3:7] += torch.rand_like(default_root_state[:, 3:7]) * 0.1 - 0.05
+            default_root_state[:, 3:7] = math_utils.normalize(default_root_state[:, 3:7])
+            default_root_state[:, 7:] += torch.rand_like(default_root_state[:, 7:]) * 0.1 - 0.05
+
+        # ------------------------------------------------------------------
+        # 6. ACTION PRE-LOADER (Stop the "Torque Bomb"!)
+        # ------------------------------------------------------------------
         self._sit_baseline[env_ids] = joint_pos.clone()
-
-        # Initialize previous joint pos to the SIT pose so abrupt_change doesn't trigger!
         self._previous_joint_pos[env_ids] = joint_pos.clone()
-        self._actions[env_ids] = 0.0
-        self._previous_actions[env_ids] = 0.0
 
+        # Calculate the exact neural network action required to hold the spawned pose (including the noise!)
+        target_delta = joint_pos - self._robot.data.default_joint_pos[env_ids]
+        initial_action = target_delta / self.cfg.action_scale
+
+        self._actions[env_ids] = initial_action
+        self._previous_actions[env_ids] = initial_action
+
+        # ------------------------------------------------------------------
+        # 7. WRITE TO SIMULATOR
+        # ------------------------------------------------------------------
         self._robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
         self._robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+
+        if "episode" not in self.extras:
+            self.extras["episode"] = {}
 
         # Log and reset episode sums
         for key in self.episode_sums.keys():

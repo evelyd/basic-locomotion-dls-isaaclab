@@ -9,6 +9,7 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     observation_space = 47
     action_scale = 0.5
     use_filter_actions = True
+    randomize_initial_state = True
 
     # Disable components from the locomotion template not needed for stand dance
     use_clock_signal = False
@@ -32,7 +33,7 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     scale_factor_low = 0.25
     scale_factor_high = 0.35
     upright_vec = [-0.0524078, 0.0, 1.0]
-    allow_contact_steps = 30
+    allow_contact_steps = 100
 
     # ------------------------------------------------------------------------
     # Reward Scales (Mapped directly from go2_standdance_config.py)
