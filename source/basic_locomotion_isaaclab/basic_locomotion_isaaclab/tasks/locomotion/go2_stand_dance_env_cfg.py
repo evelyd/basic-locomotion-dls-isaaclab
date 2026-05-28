@@ -47,8 +47,8 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     height_reward_scale = 0.0
 
     # Stand Dance Rewards
-    tracking_lin_vel_stand_scale = 0.8
-    tracking_ang_vel_stand_scale = 0.5
+    tracking_lin_vel_stand_scale = 5.0
+    tracking_ang_vel_stand_scale = 5.0
     lift_up_linear_scale = 0.8
     upright_scale = 10.0
     # upright_balance_scale = 2.0
@@ -57,13 +57,13 @@ class Go2StandDanceEnvCfg(Go2FlatEnvCfg):
     # Penalties
     termination_reward_scale = -100.0
     undesired_contact_reward_scale = -2.0
-    action_rate_reward_scale = -0.15
     joints_torque_reward_scale = -2.0e-5
     joints_accel_reward_scale = -2.5e-5
     rear_air_scale = -0.5
-    action_q_diff_scale = -1.0
+    action_rate_reward_scale = 1.0
+    action_q_diff_scale = 0.5
     hip_still_scale = -0.5
-    feet_clearance_cmd_linear_scale = -3000.0
+    feet_clearance_cmd_linear_scale = 3.0
     feet_slip_scale = -0.4
     foot_shift_scale = -50.0
     joints_energy_reward_scale = 0.0

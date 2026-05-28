@@ -119,7 +119,7 @@ class Go2StandDanceEnv(DirectRLEnv):
 
         # Filter the action
         if(self.cfg.use_filter_actions):
-            alpha = 0.8
+            alpha = 0.2
             temp = alpha * self._actions + (1 - alpha) * self._previous_actions
             self._processed_actions = self.cfg.action_scale * temp + self._robot.data.default_joint_pos
 
@@ -279,15 +279,17 @@ class Go2StandDanceEnv(DirectRLEnv):
         # # q_diff = q_diff_raw * mercy_mask_float
         # q_diff = q_diff_raw
         # Use torch.abs (L1 Norm) to prevent the exponential explosion!
-        q_diff = torch.sum(torch.abs(motor_targets - self._robot.data.joint_pos), dim=-1)
+        # Action Q Diff (Positive Tracking Bonus)
+        motor_targets = (self._actions * self.cfg.action_scale) + self._robot.data.default_joint_pos
+        q_diff_raw = torch.sum(torch.abs(motor_targets - self._robot.data.joint_pos), dim=-1)
+        q_diff = torch.exp(-q_diff_raw / 1.0)
+
+        # Action Rate (Positive Smoothness Bonus)
+        action_rate_raw = torch.sum(torch.square(self._previous_actions - self._actions), dim=1)
+        action_rate_reward = torch.exp(-action_rate_raw / 0.05)
 
         # Relax the tracking sigma to match Isaac Gym (0.25 instead of 0.05)
         track_lin_vel = torch.exp(-lin_vel_error / 0.25) * is_stand.float() * scaling_factor
-
-        # action rate pen
-        # action_rate_raw = torch.sum(torch.square(self._previous_actions - self._actions), dim=1)
-        # action_rate_reward = torch.exp(-action_rate_raw / 0.05)
-        action_rate_reward = torch.sum(torch.square(self._previous_actions - self._actions), dim=1)
 
         # joint torque pen
         torques_reward = torch.sum(torch.square(self._robot.data.applied_torque), dim=1)
@@ -298,23 +300,27 @@ class Go2StandDanceEnv(DirectRLEnv):
         hip_still_reward = hip_movement * mercy_mask_float
 
         # foot clearance pen
-        # Creates a triangle wave (0 -> 1 -> 0) based on the clock from _get_observations
+        # 1. Create the phase triangle wave (0 -> 1 -> 0)
         phases = 1 - torch.abs(1.0 - torch.clip((self._rear_foot_indices * 2.0) - 1.0, 0.0, 1.0) * 2.0)
+
+        # 2. CREATE THE MISSING ISAAC GYM MASK
+        # If the phase is > 0.05, the foot is supposed to be lifting.
+        # If it is < 0.05, the foot is planted and we should IGNORE tracking errors!
+        foot_in_air_mask = (phases > 0.15).float()
 
         rear_foot_heights = self._robot.data.body_pos_w[:, self._rear_feet_ids_robot, 2]
         terrain_at_foot_height = 0.0
 
-        # Target an arc of 0.05m height
         target_height = 0.05 * phases + terrain_at_foot_height + 0.02
 
-        # MINIMAL CHANGE: Replace active_mask_float with command velocity check
-        # is_commanded_to_move = (torch.norm(self._commands[:, :2], dim=1) > 0.1).float()
+        # 3. Apply the mask to the squared error BEFORE summing!
+        raw_error = torch.square(target_height - rear_foot_heights)
+        masked_error = raw_error * foot_in_air_mask
 
-        clearance_error = torch.square(target_height - rear_foot_heights)
+        clearance_error = torch.sum(masked_error, dim=1)
 
-        # # Multiply by the command mask so it only marches when told to walk!
-        # rew_foot_clearance = torch.sum(clearance_error, dim=1) * is_commanded_to_move
-        rew_foot_clearance = torch.sum(clearance_error, dim=1)
+        # 4. Safely apply the positive exponential bonus
+        rew_foot_clearance = torch.exp(-clearance_error / 0.001)
 
         # feet slip pen
         # 1. Condition: Foot Z-height < 0.03m (Assuming flat terrain at Z=0.0 for now)
@@ -426,10 +432,6 @@ class Go2StandDanceEnv(DirectRLEnv):
             "collision": rew_collision * self.cfg.undesired_contact_reward_scale * self.reward_cl * self.step_dt,
             "termination": termination.float() * self.cfg.termination_reward_scale * self.reward_cl,
         }
-
-        # Add to episodic sums for logging
-        for key, value in rewards.items():
-            self.episode_sums[key] += value
 
         # 1. Sum the step rewards
         total_reward = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
@@ -680,19 +682,20 @@ class Go2StandDanceEnv(DirectRLEnv):
         self._commands[env_ids, 0:1] = torch.sign(conti_velx_cmd) * torch.round(torch.abs(conti_velx_cmd) / 0.1) * 0.1
 
     def _update_command_curriculum(self):
-        # This should be called periodically (e.g., when the max_episode_length is reached)
-        avg_tracking_lin_vel = torch.mean(self.episode_sums["tracking_lin_vel"]) / self.max_episode_length
-        avg_tracking_ang_vel = torch.mean(self.episode_sums["tracking_ang_vel"]) / self.max_episode_length
+        # Calculate the true per-step average using the CURRENT step count!
+        live_avg_lin_vel = self.episode_sums["tracking_lin_vel"] / (self.episode_length_buf + 1e-5)
+        live_avg_ang_vel = self.episode_sums["tracking_ang_vel"] / (self.episode_length_buf + 1e-5)
 
-        # Normalize by the reward scales you set in your config
-        normalized_lin_vel_reward = avg_tracking_lin_vel / self.cfg.tracking_lin_vel_stand_scale
-        normalized_ang_vel_reward = avg_tracking_ang_vel / self.cfg.tracking_ang_vel_stand_scale
+        avg_tracking_lin_vel = torch.mean(live_avg_lin_vel)
+        avg_tracking_ang_vel = torch.mean(live_avg_ang_vel)
+
+        # Normalize by the reward scales AND the timestep (step_dt)
+        normalized_lin_vel_reward = avg_tracking_lin_vel / (self.cfg.tracking_lin_vel_stand_scale * self.step_dt)
+        normalized_ang_vel_reward = avg_tracking_ang_vel / (self.cfg.tracking_ang_vel_stand_scale * self.step_dt)
 
         if normalized_lin_vel_reward > 0.8:
             self._command_ranges["lin_vel_x"][0] = torch.clip(self._command_ranges["lin_vel_x"][0] - self.cfg.curriculum_cl_step, -self.command_max_curriculum, 0.)
             self._command_ranges["lin_vel_x"][1] = torch.clip(self._command_ranges["lin_vel_x"][1] + self.cfg.curriculum_cl_step, 0., self.command_max_curriculum)
-            self._command_ranges["lin_vel_y"][0] = torch.clip(self._command_ranges["lin_vel_y"][0] - self.cfg.curriculum_cl_step, -self.command_max_curriculum, 0.)
-            self._command_ranges["lin_vel_y"][1] = torch.clip(self._command_ranges["lin_vel_y"][1] + self.cfg.curriculum_cl_step, 0., self.command_max_curriculum)
 
         if normalized_ang_vel_reward > 0.8:
             self._command_ranges["ang_vel_z"][0] = torch.clip(self._command_ranges["ang_vel_z"][0] - self.cfg.curriculum_cl_step, -self.command_max_curriculum, 0.)
